@@ -73,9 +73,32 @@
   tmp = as.list(tgts)
   names(tmp) = tgts
   ute = estimateNonExpressingCells(sc, tmp, maximumContamination = max(contaminationRange), FDR = rhoMaxFDR)
-  m = rownames(sc$metaData)[match(rownames(ssc$metaData), sc$metaData$clusters)]
-  ute = t(ute[m, , drop = FALSE])
-  colnames(ute) = rownames(ssc$metaData)
+  
+  # Fix the logical subscript issue by properly handling the estimateNonExpressingCells output
+  # ute has cell names as rows, we need to aggregate by cluster
+  if(length(ssc$metaData$clusters) == 1) {
+    # Single cluster case - aggregate all cells
+    cluster_cells = rownames(sc$metaData)
+    ute_agg = matrix(colMeans(ute[cluster_cells, , drop = FALSE]), nrow = 1)
+    rownames(ute_agg) = rownames(ssc$metaData)
+    colnames(ute_agg) = colnames(ute)
+    ute = t(ute_agg)
+  } else {
+    # Multiple clusters case - aggregate by cluster
+    cluster_names = rownames(ssc$metaData)
+    ute_agg = matrix(0, nrow = length(cluster_names), ncol = ncol(ute))
+    rownames(ute_agg) = cluster_names
+    colnames(ute_agg) = colnames(ute)
+    
+    for(i in seq_along(cluster_names)) {
+      cluster_name = cluster_names[i]
+      cluster_cells = rownames(sc$metaData)[sc$metaData$clusters == cluster_name]
+      if(length(cluster_cells) > 0) {
+        ute_agg[i, ] = colMeans(ute[cluster_cells, , drop = FALSE])
+      }
+    }
+    ute = t(ute_agg)
+  }
   
   # Optimized expected counts calculation
   expCnts = outer(ssc$soupProfile$est, ssc$metaData$nUMIs)
