@@ -43,6 +43,15 @@
   soupProf = sc$soupProfile[order(sc$soupProfile$est, decreasing = TRUE), ]
   soupMin = quantile(soupProf$est, soupQuantile)
   if (is.null(topMarkers)) {
+    # Check if clusters are available, if not create a single cluster
+    if(!"clusters" %in% colnames(sc$metaData)) {
+      if(verbose) {
+        message("No clustering information found. Creating single cluster for all cells.")
+        message("For better results, consider providing clustering information using setClusters().")
+      }
+      # Create a single cluster for all cells
+      sc$metaData$clusters <- rep("Cluster1", nrow(sc$metaData))
+    }
     mrks = quickMarkers(sc$toc, sc$metaData$clusters, N = Inf)
     mrks = mrks[order(mrks$gene, -mrks$tfidf), ]
     mrks = mrks[!duplicated(mrks$gene), ]
@@ -179,15 +188,7 @@ autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMark
          "Got: [", paste(contaminationRange, collapse=", "), "]")
   }
   
-  # Check if clusters are available
-  if(!"clusters" %in% colnames(sc$metaData)) {
-    if(verbose) {
-      message("No clustering information found. Creating single cluster for all cells.")
-      message("For better results, consider providing clustering information using setClusters().")
-    }
-    # Create a single cluster for all cells
-    sc$metaData$clusters <- rep("Cluster1", nrow(sc$metaData))
-  }
+
   
   s = split(rownames(sc$metaData), sc$metaData$clusters)
   tmp = do.call(cbind, lapply(s, function(e) rowSums(sc$toc[, e, drop = FALSE])))

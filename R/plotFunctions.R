@@ -25,9 +25,12 @@ plotSoupCorrelation = function(sc){
   #Get nonExpressedGeneList algorithmically if missing...
   if (missing(nonExpressedGeneList)) {
     message("No gene lists provided, attempting to find and plot cluster marker genes.")
-    if (!'clusters' %in% colnames(sc$metaData))
-      stop("Clustering information required to find marker genes automatically. ",
-           "Run setClusters(sc, cluster_vector) first, or provide nonExpressedGeneList manually.")
+    if (!'clusters' %in% colnames(sc$metaData)) {
+      message("No clustering information found. Creating single cluster for all cells.")
+      message("For better results, consider providing clustering information using setClusters().")
+      # Create a single cluster for all cells
+      sc$metaData$clusters <- rep("Cluster1", nrow(sc$metaData))
+    }
     mrks = quickMarkers(sc$toc, sc$metaData$clusters, N = Inf)
     mrks = mrks[order(mrks$gene, -mrks$tfidf), ]
     mrks = mrks[!duplicated(mrks$gene), ]
