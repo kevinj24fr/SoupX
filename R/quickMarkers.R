@@ -57,9 +57,18 @@ quickMarkers = function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
       cluster_data <- cluster_data[cluster_data@x > expressCut, , drop=FALSE]
       if(length(cluster_data@x) > 0) {
         gene_counts <- table(factor(gene_names[cluster_data@i + 1], levels=gene_names))
+        # Always coerce to correct length and set names
+        gene_counts <- as.numeric(gene_counts)
+        names(gene_counts) <- gene_names
         nObs[, i] <- gene_counts
       }
     }
+  }
+  
+  # If only one cluster, ensure all matrices have correct dimnames
+  if (length(cluster_names) == 1) {
+    colnames(nObs) <- cluster_names
+    rownames(nObs) <- gene_names
   }
   
   #Calculate the observed and total frequency - vectorized

@@ -190,17 +190,25 @@ autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMark
   
   # Robust cluster aggregation for single or multiple clusters
   s = split(rownames(sc$metaData), sc$metaData$clusters)
-  tmp = do.call(cbind, lapply(s, function(e) {
-    mat = sc$toc[, e, drop = FALSE]
-    # If e is length 1, rowSums returns a vector, so coerce to matrix
-    rs = rowSums(mat)
-    if (is.null(dim(rs))) {
-      # For single cell, use the cell name as column name
-      rs = matrix(rs, ncol = 1, dimnames = list(names(rs), paste(e, collapse = "_")))
-    }
-    rs
-  }))
-  if (is.null(colnames(tmp))) colnames(tmp) <- names(s)
+  
+  # Handle single cluster case properly
+  if(length(s) == 1) {
+    cluster_name <- names(s)[1]
+    rs = rowSums(sc$toc[, s[[1]], drop = FALSE])
+    tmp = matrix(rs, ncol = 1, nrow = nrow(sc$toc),
+                dimnames = list(rownames(sc$toc), cluster_name))
+  } else {
+    tmp = do.call(cbind, lapply(s, function(e) {
+      mat = sc$toc[, e, drop = FALSE]
+      rs = rowSums(mat)
+      if (is.null(dim(rs))) {
+        rs = matrix(rs, ncol = 1, nrow = nrow(sc$toc),
+                    dimnames = list(rownames(sc$toc), paste(e, collapse = "_")))
+      }
+      rs
+    }))
+    if (is.null(colnames(tmp))) colnames(tmp) <- names(s)
+  }
   ssc = sc
   ssc$toc = tmp
   ssc$metaData = data.frame(nUMIs = colSums(tmp), row.names = colnames(tmp))
