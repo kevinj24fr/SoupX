@@ -20,8 +20,14 @@
 #' #Or use non-default values
 #' sc = estimateSoup(sc,soupRange=c(60,100))
 estimateSoup = function(sc,soupRange=c(0,100),keepDroplets=FALSE){
-  if(!is(sc,'SoupChannel'))
-    stop("sc must be a SoupChannel object.")
+  # Validate inputs
+  validate_soup_channel(sc)
+  
+  # Validate parameters
+  if(!is.numeric(soupRange) || length(soupRange) != 2 || soupRange[1] >= soupRange[2]) {
+    stop("soupRange must be a numeric vector of length 2 with increasing values. Got: [", 
+         paste(soupRange, collapse=", "), "]")
+  }
   #Estimate the soup 
   w = which(sc$nDropUMIs > soupRange[1] & sc$nDropUMIs < soupRange[2])
   sc$soupProfile = data.frame(row.names=rownames(sc$tod),

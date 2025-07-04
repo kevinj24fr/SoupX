@@ -34,10 +34,13 @@ adjustCounts = function(sc,clusters=NULL,method=c('subtraction','soupOnly','mult
   #####################
   # Parameter checking
   method = match.arg(method)
-  if(!is(sc,'SoupChannel'))
-    stop("sc must be an object of type SoupChannel")
-  if(!'rho' %in% colnames(sc$metaData))
-    stop("Contamination fractions must have already been calculated/set.")
+  validate_soup_channel(sc, require_soup_profile = TRUE, require_rho = TRUE)
+  
+  # Validate additional parameters
+  if(!is.logical(roundToInt)) stop("roundToInt must be logical (TRUE/FALSE)")
+  if(!is.numeric(verbose) || verbose < 0) stop("verbose must be a non-negative integer")
+  if(!is.numeric(tol) || tol <= 0) stop("tol must be a positive number")
+  if(!is.numeric(pCut) || pCut <= 0 || pCut >= 1) stop("pCut must be between 0 and 1")
   #Check the clusters parameter. If it's null, try and auto-fetch
   if(is.null(clusters)){
     if('clusters' %in% colnames(sc$metaData)){
@@ -50,9 +53,8 @@ adjustCounts = function(sc,clusters=NULL,method=c('subtraction','soupOnly','mult
   ################################################
   # Recursive application for when using clusters
   if(clusters[1]!=FALSE){
-    #Check we have coverage of everything
-    if(!all(colnames(sc$toc) %in% names(clusters)))
-      stop("Invalid cluster specification.  clusters must be a named vector with all column names in the table of counts appearing.")
+    # Validate cluster assignments
+    validate_clusters(clusters, colnames(sc$toc))
     #OK proceed
     s = split(colnames(sc$toc),clusters[colnames(sc$toc)])
     tmp = sc
@@ -252,7 +254,8 @@ adjustCounts = function(sc,clusters=NULL,method=c('subtraction','soupOnly','mult
                          dimnames=dimnames(out),
                          giveCsparse=FALSE)
     }else{
-      stop("Impossible!")
+      stop("Internal error: Unknown method '", method, "' after validation. ",
+           "This should not happen. Please report this bug.")
     }
   }
   #Do stochastic rounding to integers if needed

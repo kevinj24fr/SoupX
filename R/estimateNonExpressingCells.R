@@ -25,8 +25,17 @@
 #' geneList = list(CD7 = 'CD7')
 #' ute = estimateNonExpressingCells(scToy,geneList)
 estimateNonExpressingCells = function(sc,nonExpressedGeneList,clusters=NULL,maximumContamination=1.0,FDR=0.05){
-  if(!is(sc,'SoupChannel'))
-    stop("sc is not a valid SoupChannel object")
+  # Validate inputs
+  validate_soup_channel(sc, require_soup_profile = TRUE)
+  validate_gene_list(nonExpressedGeneList, rownames(sc$toc))
+  
+  # Validate parameters
+  if(!is.numeric(maximumContamination) || maximumContamination <= 0 || maximumContamination > 1) {
+    stop("maximumContamination must be between 0 and 1. Got: ", maximumContamination)
+  }
+  if(!is.numeric(FDR) || FDR <= 0 || FDR >= 1) {
+    stop("FDR must be between 0 and 1. Got: ", FDR)
+  }
   #Get clusters if they exist, if they don't, set to individual cells
   if(is.null(clusters)){
     if('clusters' %in% colnames(sc$metaData)){
@@ -39,11 +48,9 @@ estimateNonExpressingCells = function(sc,nonExpressedGeneList,clusters=NULL,maxi
       clusters = setNames(rownames(sc$metaData),rownames(sc$metaData))
   }
   #Check we have coverage of everything
-  if(!all(colnames(sc$toc) %in% names(clusters)))
-    stop("Invalid cluster specification.  clusters must be a named vector with all column names in the table of counts appearing.")
-  #Convert gene list to genuine list if vector
-  if(!is.list(nonExpressedGeneList))
-    stop("nonExpressedGeneList must be a list of sets of genes.  e.g. list(HB = c('HBB','HBA2'))")
+  if(!is.null(clusters) && !isFALSE(clusters)) {
+    validate_clusters(clusters, colnames(sc$toc))
+  }
   #Now work out which clusters to use which genes on 
   tgtGns = unique(unlist(nonExpressedGeneList))
   dat = sc$toc[tgtGns,,drop=FALSE]

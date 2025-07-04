@@ -17,12 +17,13 @@
 #' soupProf = data.frame(row.names = rownames(toc),est=rowSums(toc)/sum(toc),counts=rowSums(toc))
 #' sc = setSoupProfile(sc,soupProf)
 setSoupProfile = function(sc,soupProfile){
-  if(! 'est' %in% colnames(soupProfile))
-    stop("est column missing from soupProfile")
-  if(! 'counts' %in% colnames(soupProfile))
-    stop("counts column missing from soupProfile")
+  # Validate inputs
+  validate_soup_channel(sc)
+  validate_soup_profile(soupProfile, rownames(sc$toc))
+  
   if(!all(rownames(soupProfile) %in% rownames(sc$toc))){
-    stop("soupProfile invalid.  Not all genes found.")
+    stop("soupProfile missing genes found in count matrix. ",
+         "Missing genes: ", paste(head(setdiff(rownames(sc$toc), rownames(soupProfile)), 10), collapse=", "))
   }else{
     sc$soupProfile = soupProfile[rownames(sc$toc),]
   }
@@ -42,19 +43,22 @@ setSoupProfile = function(sc,soupProfile){
 #' mDat = read.table(system.file('extdata','toyData','metaData.tsv',package='SoupX'),sep='\t')
 #' sc = setClusters(sc,mDat$res.1)
 setClusters = function(sc,clusters){
+  # Validate inputs
+  validate_soup_channel(sc)
+  validate_clusters(clusters, rownames(sc$metaData))
+  
   if(!all(colnames(sc$toc) %in% names(clusters))){
-    if(length(clusters)!=nrow(sc$metaData)){
-      stop("Invalid cluster specification.  See help.")
-    }else{
+    if(length(clusters)==nrow(sc$metaData)){
       #Ensure the thing we're setting is not a factor
       sc$metaData$clusters = as.character(clusters)
+    }else{
+      stop("Invalid cluster specification: 'clusters' must be either a named vector with all cell names, ",
+           "or an unnamed vector with length equal to number of cells (", nrow(sc$metaData), "). ",
+           "Got length: ", length(clusters))
     }
   }else{
     sc$metaData$clusters = as.character(clusters[rownames(sc$metaData)])
   }
-  #Do a check that things set correctly
-  if(any(is.na(sc$metaData$clusters)))
-    stop("NAs found in cluster names.  Ensure a (non-na) mapping to cluster is provided for each cell.")
   return(sc)
 }
 
@@ -71,16 +75,18 @@ setClusters = function(sc,clusters){
 #' sc = load10X(system.file('extdata','toyData',package='SoupX'))
 #' sc = setContaminationFraction(sc,0.1)
 setContaminationFraction = function(sc,contFrac,forceAccept=FALSE){
-  #Never want to let this through no matter what
-  if(any(contFrac>1))
-    stop("Contamination fraction greater than 1 detected.  This is impossible and likely represents a failure in the estimation procedure used.")
+  # Validate inputs
+  validate_soup_channel(sc)
+  validate_contamination_fraction(contFrac, rownames(sc$metaData))
   #Let everything else through with a diagnostic message
   if(forceAccept){
     warning = message
     stop = message
   }
   if(any(contFrac>0.5)){
-    stop(sprintf("Extremely high contamination estimated (%.2g).  This likely represents a failure in estimating the contamination fraction.  Set forceAccept=TRUE to proceed with this value.",max(contFrac)))
+    stop(sprintf("Extremely high contamination estimated (%.2g%%). This likely indicates estimation failure. ", 
+                 max(contFrac)*100),
+         "Check your marker genes and soup profile. Set forceAccept=TRUE to override this safety check.")
   }else if(any(contFrac>0.3)){
     warning(sprintf("Estimated contamination is very high (%.2g).",max(contFrac)))
   }
@@ -89,7 +95,10 @@ setContaminationFraction = function(sc,contFrac,forceAccept=FALSE){
     sc$metaData$rho=contFrac
   }else{
     if(!all(names(contFrac) %in% rownames(sc$metaData)))
-      stop("contFrac must be either of length 1 or a named vector with names matching the rows of sc$metaData")
+      stop("When providing per-cell contamination fractions, 'contFrac' must be a named vector. ",
+           "Names must match cell IDs (rownames of sc$metaData). ",
+           "For global contamination, provide a single value. ",
+           "Missing cells: ", paste(head(setdiff(names(contFrac), rownames(sc$metaData)), 10), collapse=", "))
     sc$metaData$rho[match(names(contFrac),rownames(sc$metaData))] = contFrac
   }
   return(sc)

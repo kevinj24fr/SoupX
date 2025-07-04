@@ -38,8 +38,14 @@
 #' @importFrom stats dgamma qgamma 
 #' @importFrom graphics abline lines legend plot
 autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMarkers=100,contaminationRange=c(0.01,0.8),rhoMaxFDR=0.2,priorRho=0.05,priorRhoStdDev=0.10,doPlot=TRUE,forceAccept=FALSE,verbose=TRUE){
-  if(!'clusters' %in% colnames(sc$metaData))
-    stop("Clustering information must be supplied, run setClusters first.")
+  # Validate inputs
+  validate_soup_channel(sc, require_soup_profile = TRUE, require_clusters = TRUE)
+  
+  # Validate contamination range
+  if(length(contaminationRange) != 2 || any(contaminationRange < 0) || any(contaminationRange > 1) || contaminationRange[1] >= contaminationRange[2]) {
+    stop("contaminationRange must be a vector of length 2 with values between 0 and 1, where first value < second value. ",
+         "Got: [", paste(contaminationRange, collapse=", "), "]")
+  }
   #First collapse by cluster
   s = split(rownames(sc$metaData),sc$metaData$clusters)
   tmp = do.call(cbind,lapply(s,function(e) rowSums(sc$toc[,e,drop=FALSE])))
@@ -75,7 +81,10 @@ autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMark
   #mrks = mrks[mrks$gene %in% tgts,]
   #tgts = head(mrks$gene,nMarks)
   if(length(tgts)==0){
-    stop("No plausible marker genes found.  Is the channel low complexity (see help)?  If not, reduce tfidfMin or soupQuantile")
+    stop("No suitable marker genes found for contamination estimation. ",
+         "Try: (1) reducing tfidfMin (currently ", tfidfMin, ") to accept less specific markers, ",
+         "or (2) reducing soupQuantile (currently ", soupQuantile, ") to include lower-expressed genes, ",
+         "or (3) if your data is homogeneous (e.g., cell line), manually set contamination with setContaminationFraction().")
   }
   if(length(tgts)<10){
     warning("Fewer than 10 marker genes found.  Is this channel low complexity (see help)?  If not, consider reducing tfidfMin or soupQuantile")

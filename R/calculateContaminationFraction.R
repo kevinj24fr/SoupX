@@ -28,15 +28,14 @@
 #' sc = calculateContaminationFraction(scToy,geneList,ute)
 #' @importFrom stats coef confint glm poisson quantile
 calculateContaminationFraction = function(sc,nonExpressedGeneList,useToEst,verbose=TRUE,forceAccept=FALSE){
-  if(!is(sc,'SoupChannel')){
-    stop("sc must be a SoupChannel object")
-  }
-  #Check that you've provided the genes in the right format
-  if(!is.list(nonExpressedGeneList))
-    stop("nonExpressedGeneList must be a list of sets of genes.  e.g. list(HB = c('HBB','HBA2'))")
+  # Validate inputs
+  validate_soup_channel(sc, require_soup_profile = TRUE)
+  validate_gene_list(nonExpressedGeneList, rownames(sc$toc))
   #Check we can estimate
   if(sum(useToEst)==0)
-    stop("No cells specified as acceptable for estimation.  useToEst must not be all FALSE")
+    stop("No cells available for contamination estimation. All cells in 'useToEst' are FALSE. ",
+         "This usually means marker genes are expressed in all cell clusters. ",
+         "Try using different marker genes or increasing maximumContamination in estimateNonExpressingCells().")
   #Construct the data.frame to perform inferance on
   df = list()
   for(i in seq_along(nonExpressedGeneList)){

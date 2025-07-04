@@ -20,4 +20,4 @@
 #' @importFrom utils data read.delim setTxtProgressBar txtProgressBar head
 #' @importFrom methods as is
 NULL
-utils::globalVariables(c('RD1','RD2','nUMIs','est','lower','upper','isLogged','MarkerGroup','Values','rho','qVals','logRatio','expSoupCnts','soupProfile'))
+utils::globalVariables(c('RD1','RD2','nUMIs','est','lower','upper','isLogged','MarkerGroup','Values','rho','qVals','logRatio','expSoupCnts','soupProfile','cont_frac','cell_names','gene_list','available_genes','clusters','soup_profile','gene_names','tod','toc','DR','min_dims'))

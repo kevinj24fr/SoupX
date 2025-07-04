@@ -6,7 +6,8 @@
 #' @return A ggplot2 object containing the plot.
 plotSoupCorrelation = function(sc){
   if(!is(sc,'SoupChannel'))
-    stop("sc not a valid SoupChannel object.")
+    stop("'sc' must be a SoupChannel object. Got object of class: ", class(sc)[1], 
+         ". Create SoupChannel with SoupChannel(tod, toc).")
   #Calculate the cell profile
   cellProfile = rowSums(sc$toc)
   cellProfile = (cellProfile/sum(cellProfile))
@@ -41,13 +42,15 @@ plotSoupCorrelation = function(sc){
 #' gg = plotMarkerDistribution(scToy,list(CD7='CD7',LTB='LTB'))
 plotMarkerDistribution = function(sc,nonExpressedGeneList,maxCells=150,tfidfMin=1,...){
   if(!is(sc,'SoupChannel'))
-    stop("sc not a valid SoupChannel object.")
+    stop("'sc' must be a SoupChannel object. Got object of class: ", class(sc)[1], 
+         ". Create SoupChannel with SoupChannel(tod, toc).")
   #Get nonExpressedGeneList algorithmically if missing...
   if(missing(nonExpressedGeneList)){
     message("No gene lists provided, attempting to find and plot cluster marker genes.")
     #Get marker genes instead.  Obviously this requires clustering
     if(!'clusters' %in% colnames(sc$metaData))
-      stop("Failed as no clusters found!  Clustering must be set via 'setClusters' to find marker genes.")
+      stop("Clustering information required to find marker genes automatically. ",
+           "Run setClusters(sc, cluster_vector) first, or provide nonExpressedGeneList manually.")
     #Get top markers
     mrks = quickMarkers(sc$toc,sc$metaData$clusters,N=Inf)
     #And only the most specific entry for each gene
@@ -66,7 +69,9 @@ plotMarkerDistribution = function(sc,nonExpressedGeneList,maxCells=150,tfidfMin=
   }
   #Make non-lists into lists
   if(!is.list(nonExpressedGeneList))
-    stop("nonExpressedGeneList must be a list of sets of genes.  e.g. list(HB = c('HBB','HBA2'))")
+    stop("'nonExpressedGeneList' must be a named list of gene sets for contamination estimation. ",
+         "Example: list(HB = c('HBB','HBA2'), IG = c('IGHA1','IGHG1')). ",
+         "Got object of class: ", class(nonExpressedGeneList)[1])
   #Get the non-expressing matrix
   nullMat = estimateNonExpressingCells(sc,nonExpressedGeneList,...)
   #Calculate the ratio to the soup for each marker group in each cell
@@ -141,16 +146,19 @@ plotMarkerDistribution = function(sc,nonExpressedGeneList,maxCells=150,tfidfMin=
 #' gg = plotMarkerMap(scToy,'CD7')
 plotMarkerMap = function(sc,geneSet,DR,ratLims=c(-2,2),FDR=0.05,useToEst=NULL,pointSize=2.0,pointShape=21,pointStroke=0.5,naPointSize=0.25){
   if(!is(sc,'SoupChannel'))
-    stop("sc not a valid SoupChannel object.")
+    stop("'sc' must be a SoupChannel object. Got object of class: ", class(sc)[1], 
+         ". Create SoupChannel with SoupChannel(tod, toc).")
   #Try and get DR if missing
   if(missing(DR))
     DR = sc$metaData[,sc$DR]
   #Make sure DR is sensible
   DR = as.data.frame(DR)
   if(ncol(DR)<2)
-    stop("Need at least two reduced dimensions.")
+    stop("Dimension reduction matrix 'DR' must have at least 2 columns for plotting. ",
+         "Got ", ncol(DR), " columns.")
   if(!(all(rownames(DR) %in% colnames(sc$toc))))
-    stop("rownames of DR need to match column names of sc$toc")
+    stop("Rownames of 'DR' must match cell names in count matrix. ",
+         "Missing cells: ", paste(head(setdiff(rownames(DR), colnames(sc$toc)), 10), collapse=", "))
   #Get the ratio of observed to expected
   obs = colSums(sc$toc[geneSet,,drop=FALSE])
   exp = sc$metaData$nUMIs*sum(sc$soupProfile[geneSet,'est'])
@@ -216,9 +224,11 @@ plotChangeMap = function(sc,cleanedMatrix,geneSet,DR,dataType=c('soupFrac','bina
   #Make sure DR is sensible
   DR = as.data.frame(DR)
   if(ncol(DR)<2)
-    stop("Need at least two reduced dimensions.")
+    stop("Dimension reduction matrix 'DR' must have at least 2 columns for plotting. ",
+         "Got ", ncol(DR), " columns.")
   if(!(all(rownames(DR) %in% colnames(sc$toc))))
-    stop("rownames of DR need to match column names of sc$toc")
+    stop("Rownames of 'DR' must match cell names in count matrix. ",
+         "Missing cells: ", paste(head(setdiff(rownames(DR), colnames(sc$toc)), 10), collapse=", "))
   colnames(DR)[1:2] = c('RD1','RD2')
   #Simple one panel version
   if(dataType=='soupFrac'){

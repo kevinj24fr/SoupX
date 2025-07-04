@@ -38,7 +38,9 @@ load10X = function(dataDir,cellIDs=NULL,channelName=NULL,readArgs=list(),include
     ###  cellIDs = gsub('\\-1$','',cellIDs)
     #Check we have the IDs
     if(!all(cellIDs %in% colnames(dat)))
-      stop("Not all supplied cellIDs found in raw data.")
+      stop("Not all supplied cellIDs found in raw data. ",
+           "Missing cellIDs: ", paste(head(setdiff(cellIDs, colnames(dat)), 10), collapse=", "), 
+           ". Check cellID format matches raw data column names.")
     datCells = dat[,match(cellIDs,colnames(dat))]
   }else{
     #Work out which ones contain cells
@@ -97,7 +99,9 @@ load10X = function(dataDir,cellIDs=NULL,channelName=NULL,readArgs=list(),include
   if(!is.null(mDat) && any(rownames(mDat)!=colnames(datCells))){
     rownames(mDat) = gsub('-1$','',rownames(mDat))
     if(any(rownames(mDat)!=colnames(datCells)))
-      stop("Error matching meta-data to cell names.")
+      stop("Error matching metadata to cell names. ",
+           "Metadata rownames must match cell names in count matrix. ",
+           "Check that cell barcodes are consistent between data files.")
   }
   #Get a name for the channel
   if(is.null(channelName))

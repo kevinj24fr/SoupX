@@ -24,13 +24,13 @@
 #' names(sc)
 #' @seealso SoupChannelList estimateSoup setSoupProfile setClusters
 SoupChannel = function(tod,toc,metaData=NULL,calcSoupProfile=TRUE,...){
+  # Validate count matrices
+  validate_count_matrices(tod, toc)
+  
+  # Validate metadata if provided
   if(!is.null(metaData) & !all(sort(colnames(toc))==sort(rownames(metaData))))
-    stop("Rownames of metaData must match column names of table of counts.")
-  #Check that tod and toc are compatible
-  if(nrow(tod)!=nrow(toc))
-    stop("The provided table of droplets (tod) and table of counts (toc) have different numbers of genes.  Both tod and toc must have the same genes in the same order.")
-  if(any(rownames(tod)!=rownames(toc)))
-    stop("Rownames of the table of droplets (tod) and table of counts (toc) differ.  Both tod and toc must have the same genes in the same order.")
+    stop("Rownames of metaData must exactly match column names of table of counts. ",
+         "Found ", nrow(metaData), " rows in metaData but ", ncol(toc), " columns in toc.")
   #Munge everything into a list
   out = list(tod=tod,toc=toc)
   out = c(out,list(...))
