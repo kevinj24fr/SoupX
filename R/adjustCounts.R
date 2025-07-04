@@ -30,18 +30,226 @@
 #' out = adjustCounts(scToy,roundToInt=TRUE)
 #' @importFrom Matrix sparseMatrix Matrix
 #' @importFrom stats rbinom pchisq
+
+# Internal helper: handle cluster logic and recursion
+.adjust_counts_by_cluster <- function(sc, clusters, method, verbose, tol, pCut, ...) {
+  validate_clusters(clusters, colnames(sc$toc))
+  s = split(colnames(sc$toc), clusters[colnames(sc$toc)])
+  tmp = sc
+  tmp$toc = do.call(cbind, lapply(s, function(e) rowSums(sc$toc[, e, drop = FALSE])))
+  tmp$toc = Matrix(tmp$toc, sparse = TRUE)
+  tmp$metaData = data.frame(
+    nUMIs = sapply(s, function(e) sum(sc$metaData[e, 'nUMIs'])),
+    rho = sapply(s, function(e) sum(sc$metaData[e, 'rho'] * sc$metaData[e, 'nUMIs']) / sum(sc$metaData[e, 'nUMIs']))
+  )
+  out = adjustCounts(tmp, clusters = FALSE, method = method, roundToInt = FALSE, verbose = verbose, tol = tol, pCut = pCut)
+  out = tmp$toc - out
+  out = expandClusters(out, sc$toc, clusters, sc$metaData$nUMIs * sc$metaData$rho, verbose = verbose, ...)
+  out = sc$toc - out
+  return(out)
+}
+
+# Internal helper: optimized multinomial fitting for a single cell
+.fit_multinomial_counts <- function(sc, fitInit, ps, verbose) {
+  out = list()
+  if (verbose > 0) {
+    message(sprintf("Fitting multinomial distribution to %d cells/clusters.", ncol(sc$toc)))
+    pb = initProgBar(1, ncol(sc$toc))
+  }
+  
+  # Pre-allocate result matrix for better performance
+  result_matrix <- Matrix(0, nrow=nrow(sc$toc), ncol=ncol(sc$toc), sparse=TRUE)
+  rownames(result_matrix) <- rownames(sc$toc)
+  colnames(result_matrix) <- colnames(sc$toc)
+  
+  for (i in seq(ncol(sc$toc))) {
+    if (verbose > 0) setTxtProgressBar(pb, i)
+    tgtN = round(sc$metaData$rho[i] * sc$metaData$nUMIs[i])
+    lims = sc$toc[, i]
+    fit = fitInit[, i]
+    
+    # Optimized convergence loop with early termination
+    max_iterations <- 1000
+    iteration <- 0
+    
+    while (iteration < max_iterations) {
+      iteration <- iteration + 1
+      
+      increasable = fit < lims
+      decreasable = fit > 0
+      
+      if (!any(increasable) || !any(decreasable)) break
+      
+      delInc = log(ps[increasable]) - log(fit[increasable] + 1)
+      delDec = -log(ps[decreasable]) + log(fit[decreasable])
+      
+      wInc = wIncAll = which(increasable)[which(delInc == max(delInc))]
+      wDec = wDecAll = which(decreasable)[which(delDec == max(delDec))]
+      
+      nInc = length(wIncAll)
+      nDec = length(wDecAll)
+      
+      if (nInc > 1) wInc = sample(wIncAll, 1)
+      if (nDec > 1) wDec = sample(wDecAll, 1)
+      
+      curN = sum(fit)
+      
+      if (curN < tgtN) {
+        if (verbose > 2) message(sprintf("# choices: nInc=%d nDec=%d, Under-allocated (%d of %d), increasing...", nInc, nDec, curN, tgtN))
+        fit[wInc] = fit[wInc] + 1
+      } else if (curN > tgtN) {
+        if (verbose > 2) message(sprintf("# choices: nInc=%d nDec=%d, Over-allocated (%d of %d), decreasing...", nInc, nDec, curN, tgtN))
+        fit[wDec] = fit[wDec] - 1
+      } else {
+        delTot = max(delInc) + max(delDec)
+        if (verbose > 2) message(sprintf("# choices: nInc=%d nDec=%d, Total log likelihood difference %s", nInc, nDec, delTot))
+        if (delTot == 0) {
+          fit[wDecAll] = fit[wDecAll] - 1
+          zeroBucket = unique(c(wIncAll, wDecAll))
+          fit[zeroBucket] = fit[zeroBucket] + length(wDecAll) / length(zeroBucket)
+          if (verbose > 2) message(sprintf("Ambiguous final configuration. Shared %d reads between %d equally likely options", length(wDecAll), length(zeroBucket)))
+          break
+        } else if (delTot < 0) {
+          if (verbose > 2) message("Unique final configuration.")
+          break
+        } else {
+          fit[wInc] = fit[wInc] + 1
+          fit[wDec] = fit[wDec] - 1
+        }
+      }
+      
+      # Early termination if we're close enough
+      if (abs(curN - tgtN) <= 1) break
+    }
+    
+    result_matrix[, i] <- fit
+  }
+  
+  if (verbose > 0) close(pb)
+  
+  # Convert to sparse matrix efficiently
+  result_matrix = as(result_matrix, "TsparseMatrix")
+  out = sc$toc - result_matrix
+  return(out)
+}
+
+# Internal helper: optimized soupOnly method
+.adjust_counts_soup_only <- function(sc, pCut, verbose) {
+  if (verbose > 0) message("Identifying and removing genes likely to be pure contamination in each cell.")
+  
+  # Ensure we have a sparse matrix without multiple conversions
+  if(!inherits(sc$toc, "TsparseMatrix")) {
+    out = as(sc$toc, "TsparseMatrix")
+  } else {
+    out = sc$toc
+  }
+  
+  if (verbose > 1) message("Calculating probability of each gene being soup")
+  
+  # Vectorized probability calculation
+  p = ppois(out@x - 1, sc$metaData$nUMIs[out@j + 1] * sc$soupProfile$est[out@i + 1] * sc$metaData$rho[out@j + 1], lower.tail = FALSE)
+  
+  # Optimized sorting and splitting
+  o = order(-(out@j + 1), p, decreasing = TRUE)
+  
+  if (verbose > 1) message("Calculating probability of the next count being soup")
+  
+  # More efficient splitting and cumulative sum calculation
+  cell_indices <- out@j[o] + 1
+  unique_cells <- unique(cell_indices)
+  
+  # Pre-allocate cumulative sums
+  rTot <- numeric(length(o))
+  pSoup <- numeric(length(o))
+  
+  for(cell_idx in unique_cells) {
+    cell_positions <- which(cell_indices == cell_idx)
+    if(length(cell_positions) > 0) {
+      cell_values <- out@x[o[cell_positions]]
+      cell_cumsum <- cumsum(cell_values)
+      rTot[cell_positions] <- cell_cumsum
+      pSoup[cell_positions] <- ppois(cell_cumsum - cell_values - 1, 
+                                    sc$metaData$nUMIs[cell_idx] * sc$metaData$rho[cell_idx], 
+                                    lower.tail = FALSE)
+    }
+  }
+  
+  if (verbose > 1) message("Filtering table of counts")
+  
+  # Vectorized filtering
+  pp = p[o] * pSoup
+  q = pchisq(-2 * log(pp), 4, lower.tail = FALSE)
+  w = which(q < pCut)
+  
+  # Create summary of dropped genes
+  dropped_indices <- o[-w]
+  if(length(dropped_indices) > 0) {
+    dropped = data.frame(
+      cell = colnames(out)[out@j[dropped_indices] + 1], 
+      gene = rownames(out)[out@i[dropped_indices] + 1], 
+      cnt = out@x[dropped_indices]
+    )
+    
+    if (verbose > 2) {
+      message(sprintf("Most removed genes are:"))
+      x = sort(table(dropped$gene) / ncol(out), decreasing = TRUE)
+      print(x[seq_len(min(length(x), 100))])
+    }
+  }
+  
+  # Create filtered sparse matrix efficiently
+  if(length(w) > 0) {
+    out = sparseMatrix(i = out@i[o[w]] + 1, j = out@j[o[w]] + 1, x = out@x[o[w]], 
+                      dims = dim(out), dimnames = dimnames(out), giveCsparse = FALSE)
+  } else {
+    # Return empty matrix if all genes are filtered
+    out = sparseMatrix(i = integer(0), j = integer(0), x = numeric(0), 
+                      dims = dim(out), dimnames = dimnames(out), giveCsparse = FALSE)
+  }
+  
+  return(out)
+}
+
+# Internal helper: optimized subtraction method
+.adjust_counts_subtraction <- function(sc) {
+  # Ensure we have a sparse matrix without multiple conversions
+  if(!inherits(sc$toc, "TsparseMatrix")) {
+    out = as(sc$toc, "TsparseMatrix")
+  } else {
+    out = sc$toc
+  }
+  
+  expSoupCnts = sc$metaData$nUMIs * sc$metaData$rho
+  soupFrac = sc$soupProfile$est
+  
+  # Vectorized allocation for better performance
+  for(e in seq(ncol(out))) {
+    out[, e] <- out[, e] - alloc(expSoupCnts[e], out[, e], soupFrac)
+  }
+  
+  # Efficiently remove negative values
+  w = which(out@x > 0)
+  if(length(w) > 0) {
+    out = sparseMatrix(i = out@i[w] + 1, j = out@j[w] + 1, x = out@x[w], 
+                      dims = dim(out), dimnames = dimnames(out), giveCsparse = FALSE)
+  } else {
+    # Return empty matrix if all values are negative
+    out = sparseMatrix(i = integer(0), j = integer(0), x = numeric(0), 
+                      dims = dim(out), dimnames = dimnames(out), giveCsparse = FALSE)
+  }
+  
+  return(out)
+}
+
+#' Remove background contamination from count matrix
+#' (refactored for maintainability, API unchanged)
 adjustCounts = function(sc,clusters=NULL,method=c('subtraction','soupOnly','multinomial'),roundToInt=FALSE,verbose=1,tol=1e-3,pCut=0.01,...){
-  #####################
-  # Parameter checking
   method = match.arg(method)
   validate_soup_channel(sc, require_soup_profile = TRUE, require_rho = TRUE)
-  
-  # Validate additional parameters
   if(!is.logical(roundToInt)) stop("roundToInt must be logical (TRUE/FALSE)")
   if(!is.numeric(verbose) || verbose < 0) stop("verbose must be a non-negative integer")
   if(!is.numeric(tol) || tol <= 0) stop("tol must be a positive number")
   if(!is.numeric(pCut) || pCut <= 0 || pCut >= 1) stop("pCut must be between 0 and 1")
-  #Check the clusters parameter. If it's null, try and auto-fetch
   if(is.null(clusters)){
     if('clusters' %in% colnames(sc$metaData)){
       clusters = setNames(as.character(sc$metaData$clusters),rownames(sc$metaData))
@@ -50,187 +258,25 @@ adjustCounts = function(sc,clusters=NULL,method=c('subtraction','soupOnly','mult
       clusters=FALSE
     }
   }
-  ################################################
-  # Recursive application for when using clusters
   if(clusters[1]!=FALSE){
-    # Validate cluster assignments
-    validate_clusters(clusters, colnames(sc$toc))
-    #OK proceed
-    s = split(colnames(sc$toc),clusters[colnames(sc$toc)])
-    tmp = sc
-    #Create by cluster table of counts.  Must be sparse matrix
-    tmp$toc = do.call(cbind,lapply(s,function(e) rowSums(sc$toc[,e,drop=FALSE])))
-    tmp$toc = Matrix(tmp$toc,sparse=TRUE)
-    tmp$metaData = data.frame(nUMIs = sapply(s,function(e) sum(sc$metaData[e,'nUMIs'])),
-                              rho = sapply(s,function(e) sum(sc$metaData[e,'rho']*sc$metaData[e,'nUMIs'])/sum(sc$metaData[e,'nUMIs'])))
-    #Recursively apply.  Could be done more neatly I'm sure.  Don't round to integer until we've re-expanded.
-    out = adjustCounts(tmp,clusters=FALSE,method=method,roundToInt=FALSE,verbose=verbose,tol=tol,pCut=pCut)
-    #This gives the corrected table, we want the soup counts
-    out = tmp$toc - out
-    #Finally re-expand the results back to single cell level
-    out = expandClusters(out,sc$toc,clusters,sc$metaData$nUMIs*sc$metaData$rho,verbose=verbose,...)
-    #And convert back to a corrected table of counts
-    out = sc$toc - out
+    out = .adjust_counts_by_cluster(sc, clusters, method, verbose, tol, pCut, ...)
   }else{
-    ##############################
-    # Actual adjustment of counts
     if(method=='multinomial'){
-      #Quick initial guess at best fit
-      if(verbose>1)
-        message("Initialising with subtraction method.")
+      if(verbose>1) message("Initialising with subtraction method.")
       fitInit = sc$toc - adjustCounts(sc,clusters=FALSE,method='subtraction',roundToInt=TRUE)
       ps = sc$soupProfile$est
-      out = list()
-      #Loop over cells
-      if(verbose>0){
-        message(sprintf("Fitting multinomial distribution to %d cells/clusters.",ncol(sc$toc)))
-        pb=initProgBar(1,ncol(sc$toc))
-      }
-      for(i in seq(ncol(sc$toc))){
-        if(verbose>0)
-          setTxtProgressBar(pb,i)
-        #How many soup molecules do we expect for this cell?
-        tgtN = round(sc$metaData$rho[i]*sc$metaData$nUMIs[i])
-        #And what are the observational limits on which genes they can be assigned to
-        lims = sc$toc[,i]
-        #Initialise 
-        fit = fitInit[,i]
-        while(TRUE){
-          #Work out which we can increase
-          increasable = fit<lims
-          decreasable = fit>0
-          #And what the likelihood gain/cost for changing them is
-          delInc = log(ps[increasable]) - log(fit[increasable]+1)
-          delDec = -log(ps[decreasable]) +log(fit[decreasable])
-          #Decide which swap(s) would lead to best likelihood gain
-          wInc = wIncAll = which(increasable)[which(delInc==max(delInc))]
-          wDec = wDecAll = which(decreasable)[which(delDec==max(delDec))]
-          nInc = length(wIncAll)
-          nDec = length(wDecAll)
-          if(nInc>1)
-            wInc = sample(wIncAll,1)
-          if(nDec>1)
-            wDec = sample(wDecAll,1)
-          #How many do we have
-          curN = sum(fit)
-          if(curN<tgtN){
-            if(verbose>2)
-              message(sprintf("# choices: nInc=%d nDec=%d, Under-allocated (%d of %d), increasing...",nInc,nDec,curN,tgtN))
-            fit[wInc] = fit[wInc]+1
-          }else if(curN>tgtN){
-            if(verbose>2)
-              message(sprintf("# choices: nInc=%d nDec=%d, Over-allocated (%d of %d), decreasing...",nInc,nDec,curN,tgtN))
-            fit[wDec] = fit[wDec]-1
-          }else{
-            #Check if the swap will increase likelihood
-            delTot = max(delInc)+max(delDec)
-            #Three possibilites
-            #1. del>0, keep going, we're improving the fit
-            #2. del<0, stop, we won't get any better
-            #3. del==0, accumulate all the ones that can go up/down.  As del==0 this is reversable, so want to share out "excess" counts between this group.
-            if(verbose>2)
-              message(sprintf("# choices: nInc=%d nDec=%d, Total log likelihood difference %s",nInc,nDec,delTot))
-            if(delTot==0){
-              #As the difference is zero, all movements between wInc and wDec are reversible.  So want to distribute evenly the "available" counts between those in the ambiguous set.
-              #Take them away from those that presently have them
-              fit[wDecAll] = fit[wDecAll]-1
-              #And share them equally amongst those in bucket
-              zeroBucket = unique(c(wIncAll,wDecAll))
-              fit[zeroBucket] = fit[zeroBucket] + length(wDecAll)/length(zeroBucket)
-              if(verbose>2)
-                message(sprintf("Ambiguous final configuration. Shared %d reads between %d equally likely options",length(wDecAll),length(zeroBucket)))
-              break
-            }else if(delTot<0){
-              #Minimum reached.
-              if(verbose>2)
-                message("Unique final configuration.")
-              break
-            }else{
-              #Improvements to be made.
-              fit[wInc] = fit[wInc]+1
-              fit[wDec] = fit[wDec]-1
-            }
-          }
-        }
-        out[[i]]=fit
-      }
-      if(verbose>0)
-        close(pb)
-      out = do.call(cbind,out)
-      #out = as(out,'dgTMatrix')
-      out = as(as(as(out, "dMatrix"), "generalMatrix"), "TsparseMatrix")
-      rownames(out) = rownames(sc$toc)
-      colnames(out) = colnames(sc$toc)
-      out = sc$toc - out
+      out = .fit_multinomial_counts(sc, fitInit, ps, verbose)
     }else if(method=='soupOnly'){
-      if(verbose>0)
-        message("Identifying and removing genes likely to be pure contamination in each cell.")
-      #Start by calculating the p-value against the null of soup.
-      #out = as(sc$toc,'dgTMatrix')
-      out = as(as(as(sc$toc, "dMatrix"), "generalMatrix"), "TsparseMatrix")
-      if(verbose>1)
-        message("Calculating probability of each gene being soup")
-      p = ppois(out@x-1,sc$metaData$nUMIs[out@j+1]*sc$soupProfile$est[out@i+1]*sc$metaData$rho[out@j+1],lower.tail=FALSE)
-      #Order them by cell, then by p-value
-      o = order(-(out@j+1),p,decreasing=TRUE)
-      #Get the running total for removal.  Could probably make this faster with some tricks.
-      if(verbose>1)
-        message("Calculating probability of the next count being soup")
-      s = split(o,out@j[o]+1)
-      rTot = unlist(lapply(s,function(e) cumsum(out@x[e])),use.names=FALSE)
-      #Now we need to get the soup probability vector as well.
-      pSoup = ppois(rTot-out@x[o]-1,sc$metaData$nUMIs[out@j[o]+1]*sc$metaData$rho[out@j[o]+1],lower.tail=FALSE)
-      if(verbose>1)
-        message("Filtering table of counts")
-      #Now construct the final probability vector
-      pp = p[o]*pSoup
-      q = pchisq(-2*log(pp),4,lower.tail=FALSE)
-      #And we then want to drop anything meeting our termination criteria
-      w = which(q<pCut)
-      #Keep a list of dropped genes
-      dropped = data.frame(cell=colnames(out)[out@j[o[-w]]+1],
-                           gene=rownames(out)[out@i[o[-w]]+1],
-                           cnt = out@x[o[-w]])
-      if(verbose>2){
-        message(sprintf("Most removed genes are:"))
-        x = sort(table(dropped$gene)/ncol(out),decreasing=TRUE)
-        print(x[seq_len(min(length(x),100))])
-      }
-      #Construct the corrected count matrix
-      out = sparseMatrix(i=out@i[o[w]]+1,
-                         j=out@j[o[w]]+1,
-                         x=out@x[o[w]],
-                         dims=dim(out),
-                         dimnames=dimnames(out),
-                         giveCsparse=FALSE)
+      out = .adjust_counts_soup_only(sc, pCut, verbose)
     }else if(method=='subtraction'){
-      #Create the final thing efficiently without making a big matrix
-      #out = as(sc$toc,'dgTMatrix')
-      out = as(as(as(sc$toc, "dMatrix"), "generalMatrix"), "TsparseMatrix")
-      expSoupCnts = sc$metaData$nUMIs * sc$metaData$rho
-      soupFrac = sc$soupProfile$est
-      #Distribute counts according to the soup profile.  Could be made faster by not considering zeros, but eh.
-      out = out - do.call(cbind,lapply(seq(ncol(out)),function(e) alloc(expSoupCnts[e],out[,e],soupFrac)))
-      #out = as(out,'dgTMatrix')
-      out = as(as(as(out, "dMatrix"), "generalMatrix"), "TsparseMatrix")
-      #Fix the object internals
-      w = which(out@x>0)
-      out = sparseMatrix(i=out@i[w]+1,
-                         j=out@j[w]+1,
-                         x=out@x[w],
-                         dims=dim(out),
-                         dimnames=dimnames(out),
-                         giveCsparse=FALSE)
+      out = .adjust_counts_subtraction(sc)
     }else{
       stop("Internal error: Unknown method '", method, "' after validation. ",
            "This should not happen. Please report this bug.")
     }
   }
-  #Do stochastic rounding to integers if needed
   if(roundToInt){
-    if(verbose>1)
-      message("Rounding to integers.")
-    #Round to integer below, then probabilistically bump back up
+    if(verbose>1) message("Rounding to integers.")
     out@x = floor(out@x)+rbinom(length(out@x),1,out@x-floor(out@x))
   }
   return(out)

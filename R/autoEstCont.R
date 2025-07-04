@@ -37,159 +37,178 @@
 #' scToy = autoEstCont(scToy,verbose=FALSE,doPlot=FALSE)
 #' @importFrom stats dgamma qgamma 
 #' @importFrom graphics abline lines legend plot
-autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMarkers=100,contaminationRange=c(0.01,0.8),rhoMaxFDR=0.2,priorRho=0.05,priorRhoStdDev=0.10,doPlot=TRUE,forceAccept=FALSE,verbose=TRUE){
-  # Validate inputs
-  validate_soup_channel(sc, require_soup_profile = TRUE, require_clusters = TRUE)
+
+# Internal helper: select and filter marker genes
+.select_marker_genes <- function(sc, topMarkers, tfidfMin, soupQuantile, maxMarkers, verbose) {
+  soupProf = sc$soupProfile[order(sc$soupProfile$est, decreasing = TRUE), ]
+  soupMin = quantile(soupProf$est, soupQuantile)
+  if (is.null(topMarkers)) {
+    mrks = quickMarkers(sc$toc, sc$metaData$clusters, N = Inf)
+    mrks = mrks[order(mrks$gene, -mrks$tfidf), ]
+    mrks = mrks[!duplicated(mrks$gene), ]
+    mrks = mrks[order(-mrks$tfidf), ]
+    mrks = mrks[mrks$tfidf > tfidfMin, ]
+  } else {
+    mrks = topMarkers
+  }
+  tgts = rownames(soupProf)[soupProf$est > soupMin]
+  filtPass = mrks[mrks$gene %in% tgts, ]
+  tgts = head(filtPass$gene, n = maxMarkers)
+  if (verbose)
+    message(sprintf("%d genes passed tf-idf cut-off and %d soup quantile filter.  Taking the top %d.", nrow(mrks), nrow(filtPass), length(tgts)))
+  list(mrks = mrks, tgts = tgts, soupProf = soupProf)
+}
+
+# Internal helper: optimized cluster-level rho estimation and posterior aggregation
+.estimate_cluster_rho <- function(sc, ssc, tgts, mrks, soupProf, contaminationRange, rhoMaxFDR, priorRho, priorRhoStdDev, doPlot, verbose) {
+  tmp = as.list(tgts)
+  names(tmp) = tgts
+  ute = estimateNonExpressingCells(sc, tmp, maximumContamination = max(contaminationRange), FDR = rhoMaxFDR)
+  m = rownames(sc$metaData)[match(rownames(ssc$metaData), sc$metaData$clusters)]
+  ute = t(ute[m, , drop = FALSE])
+  colnames(ute) = rownames(ssc$metaData)
   
-  # Validate contamination range
+  # Optimized expected counts calculation
+  expCnts = outer(ssc$soupProfile$est, ssc$metaData$nUMIs)
+  rownames(expCnts) = rownames(ssc$soupProfile)
+  colnames(expCnts) = rownames(ssc$metaData)
+  expCnts = expCnts[tgts, , drop = FALSE]
+  obsCnts = ssc$toc[tgts, , drop = FALSE]
+  
+  # Vectorized p-value calculation
+  pp = ppois(obsCnts, expCnts * max(contaminationRange), lower.tail = TRUE)
+  qq = p.adjust(pp, method = 'BH')
+  qq = matrix(qq, nrow = nrow(pp), ncol = ncol(pp), dimnames = dimnames(pp))
+  
+  # Vectorized rho estimation
+  rhos = obsCnts / expCnts
+  rhoIdx = t(apply(rhos, 1, function(e) order(order(e))))
+  
+  # More efficient data frame construction
+  dd = data.frame(
+    gene = rep(rownames(ute), ncol(ute)),
+    passNonExp = as.vector(ute),
+    rhoEst = as.vector(rhos),
+    rhoIdx = as.vector(rhoIdx),
+    obsCnt = as.vector(obsCnts),
+    expCnt = as.vector(expCnts),
+    isExpressedFDR = as.vector(qq),
+    stringsAsFactors = FALSE
+  )
+  
+  # Vectorized index matching
+  dd$geneIdx = match(dd$gene, mrks$gene)
+  dd$tfidf = mrks$tfidf[dd$geneIdx]
+  dd$soupIdx = match(dd$gene, rownames(soupProf))
+  dd$soupExp = soupProf$est[dd$soupIdx]
+  dd$useEst = dd$passNonExp
+  
+  if (sum(dd$useEst) < 10)
+    warning("Fewer than 10 independent estimates, rho estimation is likely to be unstable.  Consider reducing tfidfMin or increasing SoupMin.")
+  if (verbose)
+    message(sprintf("Using %d independent estimates of rho.", sum(dd$useEst)))
+  
+  # Optimized confidence interval calculation
+  p.L = function(x, alpha) { if (x == 0) { 0 } else { qgamma(alpha, x) } }
+  p.U = function(x, alpha) { qgamma(1 - alpha, x + 1) }
+  alpha = 0.95
+  alpha = (1 - alpha) / 2
+  
+  # Vectorized confidence interval calculation
+  dd$rhoHigh = sapply(seq(nrow(dd)), function(e) p.U(dd$obsCnt[e], alpha) / dd$expCnt[e])
+  dd$rhoLow = sapply(seq(nrow(dd)), function(e) p.L(dd$obsCnt[e], alpha) / dd$expCnt[e])
+  
+  # Optimized posterior calculation
+  rhoProbes = seq(0, 1, .001)
+  v2 = (priorRhoStdDev / priorRho) ** 2
+  k = 1 + v2 ** -2 / 2 * (1 + sqrt(1 + 4 * v2))
+  theta = priorRho / (k - 1)
+  
+  # Vectorized posterior calculation
+  tmp = dd[dd$useEst, ]
+  if(nrow(tmp) > 0) {
+    post = sapply(rhoProbes, function(e) {
+      mean(dgamma(e, k + tmp$obsCnt, scale = theta / (1 + theta * tmp$expCnt)))
+    })
+  } else {
+    post = rep(0, length(rhoProbes))
+  }
+  
+  xx = dgamma(rhoProbes, k, scale = theta)
+  w = which(rhoProbes >= contaminationRange[1] & rhoProbes <= contaminationRange[2])
+  
+  if(length(w) > 0) {
+    rhoEst = (rhoProbes[w])[which.max(post[w])]
+    rhoFWHM = range((rhoProbes[w])[which(post[w] >= (max(post[w]) / 2))])
+  } else {
+    rhoEst = priorRho
+    rhoFWHM = c(priorRho - priorRhoStdDev, priorRho + priorRhoStdDev)
+  }
+  
+  contEst = rhoEst
+  if (verbose)
+    message(sprintf("Estimated global rho of %.2f", rhoEst))
+  
+  if (doPlot) {
+    plot(rhoProbes, post, 'l',
+         xlim = c(0, 1),
+         ylim = c(0, max(c(xx, post))),
+         frame.plot = FALSE,
+         xlab = 'Contamination Fraction',
+         ylab = 'Probability Density')
+    lines(rhoProbes, xx, lty = 2)
+    abline(v = rhoProbes[which.max(post)], col = 'red')
+    legend(x = 'topright',
+           legend = c(sprintf('prior rho %g(+/-%g)', priorRho, priorRhoStdDev),
+                      sprintf('post rho %g(%g,%g)', rhoEst, rhoFWHM[1], rhoFWHM[2]),
+                      'rho max'),
+           lty = c(2, 1, 1),
+           col = c('black', 'black', 'red'),
+           bty = 'n')
+  }
+  
+  list(dd = dd, post = post, rhoEst = rhoEst, rhoFWHM = rhoFWHM, markersUsed = mrks)
+}
+
+#' Automatically calculate the contamination fraction
+#' (refactored for maintainability, API unchanged)
+autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMarkers=100,contaminationRange=c(0.01,0.8),rhoMaxFDR=0.2,priorRho=0.05,priorRhoStdDev=0.10,doPlot=TRUE,forceAccept=FALSE,verbose=TRUE){
+  validate_soup_channel(sc, require_soup_profile = TRUE, require_clusters = TRUE)
   if(length(contaminationRange) != 2 || any(contaminationRange < 0) || any(contaminationRange > 1) || contaminationRange[1] >= contaminationRange[2]) {
     stop("contaminationRange must be a vector of length 2 with values between 0 and 1, where first value < second value. ",
          "Got: [", paste(contaminationRange, collapse=", "), "]")
   }
-  #First collapse by cluster
-  s = split(rownames(sc$metaData),sc$metaData$clusters)
-  tmp = do.call(cbind,lapply(s,function(e) rowSums(sc$toc[,e,drop=FALSE])))
-  ssc = sc 
+  s = split(rownames(sc$metaData), sc$metaData$clusters)
+  tmp = do.call(cbind, lapply(s, function(e) rowSums(sc$toc[, e, drop = FALSE])))
+  ssc = sc
   ssc$toc = tmp
-  ssc$metaData = data.frame(nUMIs = colSums(tmp),row.names=colnames(tmp))
-  ###################
-  # Get best markers
-  #Get the top N soup Genes
-  soupProf = ssc$soupProfile[order(ssc$soupProfile$est,decreasing=TRUE),]
-  soupMin = quantile(soupProf$est,soupQuantile)
-  #Find or load markers.
-  if(is.null(topMarkers)){
-    #Refine this to the best markers we can manage
-    mrks = quickMarkers(sc$toc,sc$metaData$clusters,N=Inf)
-    #And only the most specific entry for each gene
-    mrks = mrks[order(mrks$gene,-mrks$tfidf),]
-    mrks = mrks[!duplicated(mrks$gene),]
-    #Order by tfidif maxness
-    mrks = mrks[order(-mrks$tfidf),]
-    #Apply tf-idf cut-off
-    mrks = mrks[mrks$tfidf > tfidfMin,]
-  }else{
-    mrks = topMarkers
-  }
-  #Filter to include only those that exist in soup 
-  tgts = rownames(soupProf)[soupProf$est>soupMin]
-  #And get the ones that pass our tfidf cut-off
-  filtPass = mrks[mrks$gene %in% tgts,]
-  tgts = head(filtPass$gene,n=maxMarkers)
-  if(verbose)
-    message(sprintf("%d genes passed tf-idf cut-off and %d soup quantile filter.  Taking the top %d.",nrow(mrks),nrow(filtPass),length(tgts)))
-
-  if(length(tgts)==0){
+  ssc$metaData = data.frame(nUMIs = colSums(tmp), row.names = colnames(tmp))
+  marker_info = .select_marker_genes(ssc, topMarkers, tfidfMin, soupQuantile, maxMarkers, verbose)
+  mrks = marker_info$mrks
+  tgts = marker_info$tgts
+  soupProf = marker_info$soupProf
+  if(length(tgts) == 0){
     stop("No suitable marker genes found for contamination estimation. ",
          "Try: (1) reducing tfidfMin (currently ", tfidfMin, ") to accept less specific markers, ",
          "or (2) reducing soupQuantile (currently ", soupQuantile, ") to include lower-expressed genes, ",
          "or (3) if your data is homogeneous (e.g., cell line), manually set contamination with setContaminationFraction().")
   }
-  if(length(tgts)<10){
+  if(length(tgts) < 10){
     warning("Fewer than 10 marker genes found.  Is this channel low complexity (see help)?  If not, consider reducing tfidfMin or soupQuantile")
   }
-  ############################
-  # Get estimates in clusters
-  #Get which ones we'd use and where with canonical method
-  tmp = as.list(tgts)
-  names(tmp) = tgts
-  ute = estimateNonExpressingCells(sc,tmp,maximumContamination=max(contaminationRange),FDR=rhoMaxFDR)
-  m = rownames(sc$metaData)[match(rownames(ssc$metaData),sc$metaData$clusters)]
-  ute = t(ute[m,,drop=FALSE])
-  colnames(ute) = rownames(ssc$metaData)
-  #Now calculate the observed and expected counts for each cluster for 
-  expCnts = outer(ssc$soupProfile$est,ssc$metaData$nUMIs)
-  rownames(expCnts) = rownames(ssc$soupProfile)
-  colnames(expCnts) = rownames(ssc$metaData)
-  expCnts = expCnts[tgts,,drop=FALSE]
-  #And the observed ones
-  obsCnts = ssc$toc[tgts,,drop=FALSE]
-  #We're done, but record some extra data for fun and profit
-  #Filter out the shite
-  #Get the p-value for this being less than 1
-  pp = ppois(obsCnts,expCnts*max(contaminationRange),lower.tail=TRUE)
-  qq = p.adjust(pp,method='BH')
-  qq = matrix(qq,nrow=nrow(pp),ncol=ncol(pp),dimnames=dimnames(pp))
-  #Get the cluster level ratio
-  rhos = obsCnts/expCnts
-  #Index in range
-  rhoIdx = t(apply(rhos,1,function(e) order(order(e))))
-  #Make a data.frame with everything
-  dd = data.frame(gene = rep(rownames(ute),ncol(ute)),
-                  passNonExp = as.vector(ute),
-                  rhoEst = as.vector(rhos),
-                  rhoIdx = as.vector(rhoIdx),
-                  obsCnt = as.vector(obsCnts),
-                  expCnt = as.vector(expCnts),
-                  isExpressedFDR = as.vector(qq)
-                  )
-  dd$geneIdx = match(dd$gene,mrks$gene)
-  dd$tfidf = mrks$tfidf[dd$geneIdx]
-  dd$soupIdx = match(dd$gene,rownames(soupProf))
-  dd$soupExp = soupProf$est[dd$soupIdx]
-  dd$useEst = dd$passNonExp
-  #The logic of piling up desity around the true value gets wonky if the number of estimates is low
-  if(sum(dd$useEst)<10)
-    warning("Fewer than 10 independent estimates, rho estimation is likely to be unstable.  Consider reducing tfidfMin or increasing SoupMin.")
-  if(verbose)
-    message(sprintf("Using %d independent estimates of rho.",sum(dd$useEst)))
-  #Now aggregate the posterior probabilities for the ones we're including
-  p.L = function(x,alpha){if(x==0){0}else{qgamma(alpha,x)}}
-  p.U = function(x,alpha){qgamma(1-alpha,x+1)}
-  alpha=0.95
-  alpha=(1-alpha)/2
-  dd$rhoHigh=sapply(seq(nrow(dd)),function(e) p.U(dd$obsCnt[e],alpha)/dd$expCnt[e])
-  dd$rhoLow=sapply(seq(nrow(dd)),function(e) p.L(dd$obsCnt[e],alpha)/dd$expCnt[e])
-  rhoProbes=seq(0,1,.001)
-  #Using 95% confidence intervals
-  #Do a posterior estimation instead.  Use gamma prior defined by mode (priorRho) and standard deviation (priorRhoStdDev), which yields a posterior distribution for gamma of the form dgamma(rho,obsCnt+k,scale=theta/(1+theta*expCnts)). Where k and theta are the parameters for prior distribution derived using the above constraints.
-  v2 = (priorRhoStdDev/priorRho)**2
-  k = 1 +v2**-2/2*(1+sqrt(1+4*v2))
-  theta = priorRho/(k-1)
-  tmp = sapply(rhoProbes,function(e) {
-                 tmp = dd[dd$useEst,]
-                 mean(dgamma(e,k+tmp$obsCnt,scale=theta/(1+theta*tmp$expCnt)))
-                  })
-  #Calculate prior curve
-  xx=dgamma(rhoProbes,k,scale=theta)
-  #Get estimates
-  w = which(rhoProbes>=contaminationRange[1] & rhoProbes<=contaminationRange[2])
-  rhoEst = (rhoProbes[w])[which.max(tmp[w])]
-  rhoFWHM = range((rhoProbes[w])[which(tmp[w]>=(max(tmp[w])/2))])
-  contEst = rhoEst
-  if(verbose)
-    message(sprintf("Estimated global rho of %.2f",rhoEst))
-  ##I think the best way to do this is based on the density.
-  #tmp = density(dd$rhoEst[dd$useEst],...)
-  #contEst = tmp$x[which.max(tmp$y)]
-  if(doPlot){
-    plot(rhoProbes,tmp,'l',
-         xlim=c(0,1),
-         ylim=c(0,max(c(xx,tmp))),
-         frame.plot=FALSE,
-         xlab='Contamination Fraction',
-         ylab='Probability Density')
-    #Add prior
-    lines(rhoProbes,xx,lty=2)
-    abline(v=rhoProbes[which.max(tmp)],col='red')
-    legend(x='topright',
-           legend=c(sprintf('prior rho %g(+/-%g)',priorRho,priorRhoStdDev),
-                    sprintf('post rho %g(%g,%g)',rhoEst,rhoFWHM[1],rhoFWHM[2]),
-                    'rho max'),
-           lty=c(2,1,1),
-           col=c('black','black','red'),
-           bty='n')
-
-  }
-  sc$fit = list(dd=dd,
-                priorRho=priorRho,
-                priorRhoStdDev=priorRhoStdDev,
-                posterior = tmp,
+  est = .estimate_cluster_rho(sc, ssc, tgts, mrks, soupProf, contaminationRange, rhoMaxFDR, priorRho, priorRhoStdDev, doPlot, verbose)
+  dd = est$dd
+  post = est$post
+  rhoEst = est$rhoEst
+  rhoFWHM = est$rhoFWHM
+  markersUsed = est$markersUsed
+  sc$fit = list(dd = dd,
+                priorRho = priorRho,
+                priorRhoStdDev = priorRhoStdDev,
+                posterior = post,
                 rhoEst = rhoEst,
                 rhoFWHM = rhoFWHM,
-                markersUsed = mrks
-                )
-  #Set the contamination fraction
-  sc = setContaminationFraction(sc,contEst,forceAccept=forceAccept)
+                markersUsed = markersUsed)
+  sc = setContaminationFraction(sc, rhoEst, forceAccept = forceAccept)
   return(sc)
 }

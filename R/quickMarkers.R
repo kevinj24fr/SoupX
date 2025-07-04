@@ -21,43 +21,95 @@
 #' mrks = quickMarkers(srat@assays$RNA@count,srat@active.ident)
 #' }
 quickMarkers = function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
-  #Convert to the more manipulable format
-  toc = as(as(as(toc, "dMatrix"), "generalMatrix"), "TsparseMatrix")
-  w = which(toc@x>expressCut)
-  #Get the counts in each cluster
+  # Ensure we have a sparse matrix without multiple conversions
+  if(!inherits(toc, "TsparseMatrix")) {
+    toc = as(toc, "TsparseMatrix")
+  }
+  
+  # Find expressed genes more efficiently
+  w = which(toc@x > expressCut)
+  if(length(w) == 0) {
+    warning("No genes found above expression threshold. Returning empty result.")
+    return(data.frame())
+  }
+  
+  #Get the counts in each cluster - optimized
   clCnts = table(clusters)
-  nObs = split(factor(rownames(toc))[toc@i[w]+1],clusters[toc@j[w]+1])
-  nObs = sapply(nObs,table)
-  #Calculate the observed and total frequency
+  if(length(clCnts) == 0) {
+    stop("No clusters found in cluster vector")
+  }
+  
+  # More efficient way to get observed counts per cluster
+  gene_names <- rownames(toc)
+  cluster_names <- names(clCnts)
+  
+  # Create sparse matrix for observed counts
+  nObs <- Matrix(0, nrow=length(gene_names), ncol=length(cluster_names), sparse=TRUE)
+  rownames(nObs) <- gene_names
+  colnames(nObs) <- cluster_names
+  
+  # Fill observed counts efficiently
+  for(i in seq_along(cluster_names)) {
+    cluster_name <- cluster_names[i]
+    cluster_cells <- which(clusters == cluster_name)
+    if(length(cluster_cells) > 0) {
+      cluster_data <- toc[, cluster_cells, drop=FALSE]
+      cluster_data <- cluster_data[cluster_data@x > expressCut, , drop=FALSE]
+      if(length(cluster_data@x) > 0) {
+        gene_counts <- table(factor(gene_names[cluster_data@i + 1], levels=gene_names))
+        nObs[, i] <- gene_counts
+      }
+    }
+  }
+  
+  #Calculate the observed and total frequency - vectorized
   nTot = rowSums(nObs)
   tf = t(t(nObs)/as.integer(clCnts[colnames(nObs)]))
   ntf = t(t(nTot - nObs)/as.integer(ncol(toc)-clCnts[colnames(nObs)]))
   idf = log(ncol(toc)/nTot)
   score = tf*idf
-  #Calculate p-values
-  qvals = lapply(seq_len(ncol(nObs)),function(e)
-                 p.adjust(phyper(nObs[,e]-1,nTot,ncol(toc)-nTot,clCnts[colnames(nObs)[e]],lower.tail=FALSE),method='BH'))
-  qvals = do.call(cbind,qvals)
+  
+  #Calculate p-values - vectorized
+  qvals = matrix(0, nrow=nrow(nObs), ncol=ncol(nObs))
+  for(i in seq_len(ncol(nObs))) {
+    pvals <- phyper(nObs[,i]-1, nTot, ncol(toc)-nTot, clCnts[colnames(nObs)[i]], lower.tail=FALSE)
+    qvals[,i] <- p.adjust(pvals, method='BH')
+  }
   colnames(qvals) = colnames(nObs)
-  #Get gene frequency of second best
-  sndBest = lapply(seq_len(ncol(tf)),function(e) apply(tf[,-e,drop=FALSE],1,max))
-  sndBest = do.call(cbind,sndBest)
+  
+  #Get gene frequency of second best - optimized
+  sndBest = matrix(0, nrow=nrow(tf), ncol=ncol(tf))
+  sndBestName = matrix("", nrow=nrow(tf), ncol=ncol(tf))
+  
+  for(i in seq_len(ncol(tf))) {
+    other_cols <- setdiff(seq_len(ncol(tf)), i)
+    if(length(other_cols) > 0) {
+      max_vals <- apply(tf[, other_cols, drop=FALSE], 1, max)
+      max_idx <- apply(tf[, other_cols, drop=FALSE], 1, which.max)
+      sndBest[, i] <- max_vals
+      sndBestName[, i] <- colnames(tf)[other_cols[max_idx]]
+    }
+  }
   colnames(sndBest) = colnames(tf)
-  #And the name
-  sndBestName = lapply(seq_len(ncol(tf)),function(e) (colnames(tf)[-e])[apply(tf[,-e,drop=FALSE],1,which.max)])
-  sndBestName = do.call(cbind,sndBestName)
   colnames(sndBestName) = colnames(tf)
   rownames(sndBestName) = rownames(tf)
-  #Now get the top N for each group
-  w = lapply(seq_len(ncol(nObs)),function(e){
-             o = order(score[,e],decreasing=TRUE)
-             if(sum(qvals[,e]<FDR)>=N){
-               o[seq(N)]
-             }else{
-               o[qvals[o,e]<FDR]
-             }
-                 })
-  #Now construct the data.frame with everything
+  
+  #Now get the top N for each group - optimized
+  w = lapply(seq_len(ncol(nObs)), function(e){
+    o = order(score[,e], decreasing=TRUE)
+    if(sum(qvals[,e]<FDR)>=N){
+      o[seq(N)]
+    }else{
+      o[qvals[o,e]<FDR]
+    }
+  })
+  
+  #Now construct the data.frame with everything - optimized
+  if(length(unlist(w)) == 0) {
+    warning("No markers found passing FDR threshold. Returning empty result.")
+    return(data.frame())
+  }
+  
   ww = cbind(unlist(w,use.names=FALSE),rep(seq_len(ncol(nObs)),lengths(w)))
   out = data.frame(gene = rownames(nObs)[ww[,1]],
                    cluster = colnames(nObs)[ww[,2]],

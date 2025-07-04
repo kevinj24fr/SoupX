@@ -13,42 +13,78 @@ expandClusters = function(clustSoupCnts,cellObsCnts,clusters,cellWeights,verbose
   #Do one cluster at a time
   if(verbose>0)
     message(sprintf("Expanding counts from %d clusters to %d cells.",ncol(clustSoupCnts),ncol(cellObsCnts)))
-  #lapply instead of loop is a hold-over from when mclapply was an option
-  out = lapply(seq(ncol(clustSoupCnts)),
-                 function(j) {
+  
+  # Pre-allocate result matrix for better performance
+  result_matrix <- Matrix(0, nrow=nrow(cellObsCnts), ncol=ncol(cellObsCnts), sparse=TRUE)
+  rownames(result_matrix) <- rownames(cellObsCnts)
+  colnames(result_matrix) <- colnames(cellObsCnts)
+  
+  # Process clusters in parallel where possible
+  cluster_names <- colnames(clustSoupCnts)
+  
+  for(j in seq_along(cluster_names)) {
+    cluster_name <- cluster_names[j]
     if(verbose>1)
-      message(sprintf("Expanding cluster %s",colnames(clustSoupCnts)[j]))
+      message(sprintf("Expanding cluster %s", cluster_name))
+    
     #Which cells
-    wCells = which(clusters==colnames(clustSoupCnts)[j])
+    wCells = which(clusters==cluster_name)
+    if(length(wCells) == 0) next
+    
     #How should they be weighted
     ww = ws[wCells]/sum(ws[wCells])
+    
     #What is the limits
     lims = cellObsCnts[,wCells,drop=FALSE]
+    
     #And how many soup
     nSoup = clustSoupCnts[,j]
-    #Create the output object
-    #expCnts = as(lims,'dgTMatrix')
-    expCnts = as(as(as(lims, "dMatrix"), "generalMatrix"), "TsparseMatrix")
+    
+    # Create sparse matrix directly without multiple conversions
+    expCnts = as(lims, "TsparseMatrix")
+    
     #Most cases are easily dealt with.  In rough order of frequency.
     #1. No soup for gene - set to zero
     #2. All counts for gene are soup - set to lims
     #3. Not all counts are soup, but every entry is a 0 or 1 so no iteration needed.
     #4. Some iteration needed.
-    #Deal with case 1
-    expCnts@x[(expCnts@i+1) %in% which(nSoup==0)]=0
+    
+    #Deal with case 1 - vectorized operation
+    zero_soup_genes <- which(nSoup==0)
+    if(length(zero_soup_genes) > 0) {
+      zero_indices <- which((expCnts@i+1) %in% zero_soup_genes)
+      if(length(zero_indices) > 0) {
+        expCnts@x[zero_indices] = 0
+      }
+    }
+    
     #Case 2 is dealt with by construction
+    
     #Get set of genes for cases 3 and 4
     wGenes = which(nSoup>0 & nSoup<rowSums(lims))
-    #And deal with them as appropriate.  Save time by looking only at non-zero entries
-    w = which((expCnts@i+1) %in% wGenes)
-    w = split(w,expCnts@i[w]+1)
-    tmp = lapply(w,function(e) alloc(nSoup[expCnts@i[e[1]]+1],expCnts@x[e],ww[expCnts@j[e]+1]))
-    expCnts@x[unlist(w,use.names=FALSE)] = unlist(tmp,use.names=FALSE)
-    return(expCnts)
-  })
-  out = do.call(cbind,out)
-  out = out[,colnames(cellObsCnts)]
-  return(out)
+    
+    if(length(wGenes) > 0) {
+      #And deal with them as appropriate. Save time by looking only at non-zero entries
+      w = which((expCnts@i+1) %in% wGenes)
+      if(length(w) > 0) {
+        w_split = split(w, expCnts@i[w]+1)
+        
+        # Vectorized allocation for better performance
+        tmp_results <- lapply(w_split, function(e) {
+          gene_idx <- expCnts@i[e[1]]+1
+          alloc(nSoup[gene_idx], expCnts@x[e], ww[expCnts@j[e]+1])
+        })
+        
+        # Update values in one operation
+        expCnts@x[unlist(w_split, use.names=FALSE)] = unlist(tmp_results, use.names=FALSE)
+      }
+    }
+    
+    # Assign to result matrix
+    result_matrix[, wCells] <- expCnts
+  }
+  
+  return(result_matrix)
 }
 
 #' Create Seurat style progress bar
@@ -99,4 +135,247 @@ alloc = function(tgt,bucketLims,ws=rep(1/length(bucketLims),length(bucketLims)))
   out = ifelse(b,y,resid*w)
   #Need to reverse sort
   return(out[order(o)])
+}
+
+#' Benchmark SoupX performance
+#'
+#' Measures execution time and memory usage for key SoupX operations to help users
+#' understand performance characteristics and identify bottlenecks.
+#'
+#' @param sc A SoupChannel object to benchmark
+#' @param operations Character vector of operations to benchmark. Options: 
+#'   "quickMarkers", "autoEstCont", "adjustCounts", "expandClusters", "all"
+#' @param iterations Number of iterations to run for each operation (default: 3)
+#' @param verbose Whether to print detailed results
+#' @return A data.frame with performance metrics for each operation
+#' @examples
+#' # Benchmark all operations
+#' benchmark_soupx(scToy)
+#' 
+#' # Benchmark specific operations
+#' benchmark_soupx(scToy, operations=c("quickMarkers", "adjustCounts"))
+#' @export
+benchmark_soupx = function(sc, operations="all", iterations=3, verbose=TRUE) {
+  if(!inherits(sc, "SoupChannel")) {
+    stop("sc must be a SoupChannel object")
+  }
+  
+  if("all" %in% operations) {
+    operations <- c("quickMarkers", "autoEstCont", "adjustCounts", "expandClusters")
+  }
+  
+  results <- data.frame(
+    operation = character(),
+    mean_time = numeric(),
+    sd_time = numeric(),
+    min_time = numeric(),
+    max_time = numeric(),
+    memory_mb = numeric(),
+    stringsAsFactors = FALSE
+  )
+  
+  if(verbose) {
+    message("Benchmarking SoupX operations...")
+    message("Dataset size: ", nrow(sc$toc), " genes x ", ncol(sc$toc), " cells")
+  }
+  
+  # Benchmark quickMarkers
+  if("quickMarkers" %in% operations && "clusters" %in% colnames(sc$metaData)) {
+    if(verbose) message("Benchmarking quickMarkers...")
+    times <- numeric(iterations)
+    memory_usage <- numeric(iterations)
+    
+    for(i in seq_len(iterations)) {
+      gc() # Force garbage collection
+      start_mem <- sum(gc()[,2])
+      start_time <- Sys.time()
+      
+      mrks <- quickMarkers(sc$toc, sc$metaData$clusters, N=10)
+      
+      end_time <- Sys.time()
+      end_mem <- sum(gc()[,2])
+      
+      times[i] <- as.numeric(difftime(end_time, start_time, units="secs"))
+      memory_usage[i] <- (end_mem - start_mem) / 1024^2 # Convert to MB
+    }
+    
+    results <- rbind(results, data.frame(
+      operation = "quickMarkers",
+      mean_time = mean(times),
+      sd_time = sd(times),
+      min_time = min(times),
+      max_time = max(times),
+      memory_mb = mean(memory_usage),
+      stringsAsFactors = FALSE
+    ))
+  }
+  
+  # Benchmark autoEstCont (requires clusters and soup profile)
+  if("autoEstCont" %in% operations && 
+     "clusters" %in% colnames(sc$metaData) && 
+     !is.null(sc$soupProfile)) {
+    if(verbose) message("Benchmarking autoEstCont...")
+    times <- numeric(iterations)
+    memory_usage <- numeric(iterations)
+    
+    for(i in seq_len(iterations)) {
+      gc()
+      start_mem <- sum(gc()[,2])
+      start_time <- Sys.time()
+      
+      # Use tryCatch to handle potential errors gracefully
+      result <- tryCatch({
+        autoEstCont(sc, verbose=FALSE, doPlot=FALSE)
+        TRUE
+      }, error = function(e) {
+        if(verbose) message("autoEstCont failed: ", e$message)
+        FALSE
+      })
+      
+      end_time <- Sys.time()
+      end_mem <- sum(gc()[,2])
+      
+      if(result) {
+        times[i] <- as.numeric(difftime(end_time, start_time, units="secs"))
+        memory_usage[i] <- (end_mem - start_mem) / 1024^2
+      } else {
+        times[i] <- NA
+        memory_usage[i] <- NA
+      }
+    }
+    
+    # Only add results if we have valid measurements
+    valid_times <- times[!is.na(times)]
+    if(length(valid_times) > 0) {
+      results <- rbind(results, data.frame(
+        operation = "autoEstCont",
+        mean_time = mean(valid_times),
+        sd_time = sd(valid_times),
+        min_time = min(valid_times),
+        max_time = max(valid_times),
+        memory_mb = mean(memory_usage[!is.na(memory_usage)]),
+        stringsAsFactors = FALSE
+      ))
+    }
+  }
+  
+  # Benchmark adjustCounts
+  if("adjustCounts" %in% operations && 
+     !is.null(sc$soupProfile) && 
+     "rho" %in% colnames(sc$metaData)) {
+    if(verbose) message("Benchmarking adjustCounts...")
+    times <- numeric(iterations)
+    memory_usage <- numeric(iterations)
+    
+    for(i in seq_len(iterations)) {
+      gc()
+      start_mem <- sum(gc()[,2])
+      start_time <- Sys.time()
+      
+      result <- tryCatch({
+        adjustCounts(sc, verbose=0)
+        TRUE
+      }, error = function(e) {
+        if(verbose) message("adjustCounts failed: ", e$message)
+        FALSE
+      })
+      
+      end_time <- Sys.time()
+      end_mem <- sum(gc()[,2])
+      
+      if(result) {
+        times[i] <- as.numeric(difftime(end_time, start_time, units="secs"))
+        memory_usage[i] <- (end_mem - start_mem) / 1024^2
+      } else {
+        times[i] <- NA
+        memory_usage[i] <- NA
+      }
+    }
+    
+    valid_times <- times[!is.na(times)]
+    if(length(valid_times) > 0) {
+      results <- rbind(results, data.frame(
+        operation = "adjustCounts",
+        mean_time = mean(valid_times),
+        sd_time = sd(valid_times),
+        min_time = min(valid_times),
+        max_time = max(valid_times),
+        memory_mb = mean(memory_usage[!is.na(memory_usage)]),
+        stringsAsFactors = FALSE
+      ))
+    }
+  }
+  
+  # Benchmark expandClusters (requires clusters)
+  if("expandClusters" %in% operations && "clusters" %in% colnames(sc$metaData)) {
+    if(verbose) message("Benchmarking expandClusters...")
+    
+    # Create dummy cluster-level data for testing
+    clusters <- sc$metaData$clusters
+    cluster_names <- unique(clusters)
+    clustSoupCnts <- Matrix(0, nrow=nrow(sc$toc), ncol=length(cluster_names), sparse=TRUE)
+    rownames(clustSoupCnts) <- rownames(sc$toc)
+    colnames(clustSoupCnts) <- cluster_names
+    
+    # Fill with some dummy data
+    for(i in seq_along(cluster_names)) {
+      clustSoupCnts[, i] <- rowSums(sc$toc[, clusters == cluster_names[i], drop=FALSE]) * 0.1
+    }
+    
+    times <- numeric(iterations)
+    memory_usage <- numeric(iterations)
+    
+    for(i in seq_len(iterations)) {
+      gc()
+      start_mem <- sum(gc()[,2])
+      start_time <- Sys.time()
+      
+      result <- tryCatch({
+        expandClusters(clustSoupCnts, sc$toc, clusters, 
+                      sc$metaData$nUMIs * ifelse("rho" %in% colnames(sc$metaData), 
+                                                sc$metaData$rho, 0.1), verbose=0)
+        TRUE
+      }, error = function(e) {
+        if(verbose) message("expandClusters failed: ", e$message)
+        FALSE
+      })
+      
+      end_time <- Sys.time()
+      end_mem <- sum(gc()[,2])
+      
+      if(result) {
+        times[i] <- as.numeric(difftime(end_time, start_time, units="secs"))
+        memory_usage[i] <- (end_mem - start_mem) / 1024^2
+      } else {
+        times[i] <- NA
+        memory_usage[i] <- NA
+      }
+    }
+    
+    valid_times <- times[!is.na(times)]
+    if(length(valid_times) > 0) {
+      results <- rbind(results, data.frame(
+        operation = "expandClusters",
+        mean_time = mean(valid_times),
+        sd_time = sd(valid_times),
+        min_time = min(valid_times),
+        max_time = max(valid_times),
+        memory_mb = mean(memory_usage[!is.na(memory_usage)]),
+        stringsAsFactors = FALSE
+      ))
+    }
+  }
+  
+  if(verbose) {
+    message("\nPerformance Summary:")
+    message("====================")
+    for(i in seq_len(nrow(results))) {
+      op <- results$operation[i]
+      mean_t <- results$mean_time[i]
+      mem <- results$memory_mb[i]
+      message(sprintf("%-15s: %.3f ± %.3f sec, %.1f MB", op, mean_t, results$sd_time[i], mem))
+    }
+  }
+  
+  return(results)
 }

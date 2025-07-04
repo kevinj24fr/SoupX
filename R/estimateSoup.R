@@ -28,11 +28,30 @@ estimateSoup = function(sc,soupRange=c(0,100),keepDroplets=FALSE){
     stop("soupRange must be a numeric vector of length 2 with increasing values. Got: [", 
          paste(soupRange, collapse=", "), "]")
   }
+  
+  # Check if soup profile already exists and tod is NULL
+  if(!is.null(sc$soupProfile) && is.null(sc$tod)) {
+    message("Soup profile already exists and table of droplets is NULL. Returning existing soup profile.")
+    return(sc)
+  }
+  
+  # Check if tod exists
+  if(is.null(sc$tod)) {
+    stop("Table of droplets (tod) is NULL. Cannot estimate soup profile without droplet data.")
+  }
+  
   #Estimate the soup 
   w = which(sc$nDropUMIs > soupRange[1] & sc$nDropUMIs < soupRange[2])
+  
+  if(length(w) == 0) {
+    stop("No droplets found in the specified soupRange [", soupRange[1], ", ", soupRange[2], "]. ",
+         "Available UMI range: [", min(sc$nDropUMIs), ", ", max(sc$nDropUMIs), "]")
+  }
+  
   sc$soupProfile = data.frame(row.names=rownames(sc$tod),
                               est = rowSums(sc$tod[,w,drop=FALSE])/sum(sc$tod[,w]),
                               counts = rowSums(sc$tod[,w,drop=FALSE]))
+  
   #Saves a lot of space if we can drop the droplets now we're done with them
   if(!keepDroplets)
     sc$tod=NULL

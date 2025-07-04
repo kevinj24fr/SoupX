@@ -20,6 +20,55 @@ plotSoupCorrelation = function(sc){
   return(gg)
 }
 
+# Internal helper: prepare data for plotMarkerDistribution
+.prep_marker_distribution_data <- function(sc, nonExpressedGeneList, maxCells, tfidfMin, ...) {
+  #Get nonExpressedGeneList algorithmically if missing...
+  if (missing(nonExpressedGeneList)) {
+    message("No gene lists provided, attempting to find and plot cluster marker genes.")
+    if (!'clusters' %in% colnames(sc$metaData))
+      stop("Clustering information required to find marker genes automatically. ",
+           "Run setClusters(sc, cluster_vector) first, or provide nonExpressedGeneList manually.")
+    mrks = quickMarkers(sc$toc, sc$metaData$clusters, N = Inf)
+    mrks = mrks[order(mrks$gene, -mrks$tfidf), ]
+    mrks = mrks[!duplicated(mrks$gene), ]
+    mrks = mrks[order(-mrks$tfidf), ]
+    mrks = mrks[mrks$tfidf > tfidfMin, ]
+    message(sprintf("Found %d marker genes", nrow(mrks)))
+    mrks = mrks[order(sc$soupProfile[mrks$gene, 'est'], decreasing = TRUE), ]
+    nonExpressedGeneList = mrks$gene[seq(min(nrow(mrks), 20))]
+    nonExpressedGeneList = setNames(as.list(nonExpressedGeneList), nonExpressedGeneList)
+  }
+  if (!is.list(nonExpressedGeneList))
+    stop("'nonExpressedGeneList' must be a named list of gene sets for contamination estimation. ",
+         "Example: list(HB = c('HBB','HBA2'), IG = c('IGHA1','IGHG1')). ",
+         "Got object of class: ", class(nonExpressedGeneList)[1])
+  nullMat = estimateNonExpressingCells(sc, nonExpressedGeneList, ...)
+  obsProfile = t(t(sc$toc) / sc$metaData$nUMIs)
+  tst = lapply(nonExpressedGeneList, function(e) colSums(obsProfile[e, , drop = FALSE]) / sum(sc$soupProfile[e, 'est']))
+  df = data.frame(MarkerGroup = rep(names(tst), lengths(tst)),
+                  Barcode = unlist(lapply(tst, names), use.names = FALSE),
+                  Values = unlist(tst, use.names = FALSE))
+  keep = sample(colnames(sc$toc), min(ncol(sc$toc), maxCells))
+  df$nUMIs = sc$metaData[df$Barcode, 'nUMIs']
+  expCnts = do.call(rbind, lapply(nonExpressedGeneList, function(e) sc$metaData$nUMIs * sum(sc$soupProfile[e, 'est'])))
+  colnames(expCnts) = rownames(sc$metaData)
+  df$expCnts = expCnts[cbind(match(df$MarkerGroup, rownames(expCnts)), match(df$Barcode, colnames(expCnts)))]
+  df$MarkerGroup = factor(df$MarkerGroup, levels = names(nonExpressedGeneList))
+  globalRhos = c()
+  for (i in seq_along(nonExpressedGeneList)) {
+    if (sum(nullMat[, i]) > 0) {
+      tmp = suppressMessages(calculateContaminationFraction(sc, nonExpressedGeneList[i], nullMat[, i, drop = FALSE], forceAccept = TRUE))
+      globalRhos = c(globalRhos, tmp$metaData$rho[1])
+    } else {
+      globalRhos = c(globalRhos, NA)
+    }
+  }
+  names(globalRhos) = names(nonExpressedGeneList)
+  globalRhos = data.frame(MarkerGroup = factor(names(globalRhos), levels = names(nonExpressedGeneList)),
+                          rho = log10(globalRhos))
+  list(df = df, keep = keep, globalRhos = globalRhos)
+}
+
 #' Plots the distribution of the observed to expected expression for marker genes
 #'
 #' If each cell were made up purely of background reads, the expression fraction would equal that of the soup.  This plot compares this expectation of pure background to the observed expression fraction in each cell, for each of the groups of genes in \code{nonExpressedGeneList}.  For each group of genes, the distribution of this ratio is plotted across all cells.  A value significantly greater than 1 (0 on log scale) can only be obtained if some of the genes in each group are genuinely expressed by the cell.  That is, the assumption that the cell is pure background does not hold for that gene.
@@ -44,70 +93,10 @@ plotMarkerDistribution = function(sc,nonExpressedGeneList,maxCells=150,tfidfMin=
   if(!is(sc,'SoupChannel'))
     stop("'sc' must be a SoupChannel object. Got object of class: ", class(sc)[1], 
          ". Create SoupChannel with SoupChannel(tod, toc).")
-  #Get nonExpressedGeneList algorithmically if missing...
-  if(missing(nonExpressedGeneList)){
-    message("No gene lists provided, attempting to find and plot cluster marker genes.")
-    #Get marker genes instead.  Obviously this requires clustering
-    if(!'clusters' %in% colnames(sc$metaData))
-      stop("Clustering information required to find marker genes automatically. ",
-           "Run setClusters(sc, cluster_vector) first, or provide nonExpressedGeneList manually.")
-    #Get top markers
-    mrks = quickMarkers(sc$toc,sc$metaData$clusters,N=Inf)
-    #And only the most specific entry for each gene
-    mrks = mrks[order(mrks$gene,-mrks$tfidf),]
-    mrks = mrks[!duplicated(mrks$gene),]
-    #Order by tfidif maxness
-    mrks = mrks[order(-mrks$tfidf),]
-    #Apply tf-idf cut-off
-    mrks = mrks[mrks$tfidf > tfidfMin,]
-    message(sprintf("Found %d marker genes",nrow(mrks)))
-    #Of the top markers, order by soup 
-    mrks = mrks[order(sc$soupProfile[mrks$gene,'est'],decreasing=TRUE),]
-    #And keep the top 20
-    nonExpressedGeneList = mrks$gene[seq(min(nrow(mrks),20))]
-    nonExpressedGeneList = setNames(as.list(nonExpressedGeneList),nonExpressedGeneList)
-  }
-  #Make non-lists into lists
-  if(!is.list(nonExpressedGeneList))
-    stop("'nonExpressedGeneList' must be a named list of gene sets for contamination estimation. ",
-         "Example: list(HB = c('HBB','HBA2'), IG = c('IGHA1','IGHG1')). ",
-         "Got object of class: ", class(nonExpressedGeneList)[1])
-  #Get the non-expressing matrix
-  nullMat = estimateNonExpressingCells(sc,nonExpressedGeneList,...)
-  #Calculate the ratio to the soup for each marker group in each cell
-  obsProfile = t(t(sc$toc)/sc$metaData$nUMIs)
-  #Get the ratio
-  tst = lapply(nonExpressedGeneList,function(e) colSums(obsProfile[e,,drop=FALSE])/sum(sc$soupProfile[e,'est']))
-  #Unlist the thing
-  df = data.frame(MarkerGroup = rep(names(tst),lengths(tst)),
-                  Barcode=unlist(lapply(tst,names),use.names=FALSE),
-                  Values=unlist(tst,use.names=FALSE))
-  #Work out which cells to over-plot
-  keep = sample(colnames(sc$toc),min(ncol(sc$toc),maxCells))
-  #Calculate p-value for each being over some cut-off
-  df$nUMIs = sc$metaData[df$Barcode,'nUMIs']
-  #Get the expected number of counts
-  expCnts = do.call(rbind,lapply(nonExpressedGeneList,function(e) sc$metaData$nUMIs*sum(sc$soupProfile[e,'est'])))
-  colnames(expCnts) = rownames(sc$metaData)
-  df$expCnts = expCnts[cbind(match(df$MarkerGroup,rownames(expCnts)),match(df$Barcode,colnames(expCnts)))]
-  #Set order of marker group as in input
-  df$MarkerGroup = factor(df$MarkerGroup,levels=names(nonExpressedGeneList))
-  #Add a line estimating the global rho from each group
-  #First calculate global rho using nullMat
-  globalRhos=c()
-  for(i in seq_along(nonExpressedGeneList)){
-    if(sum(nullMat[,i])>0){
-      tmp = suppressMessages(calculateContaminationFraction(sc,nonExpressedGeneList[i],nullMat[,i,drop=FALSE],forceAccept=TRUE))
-      globalRhos = c(globalRhos,tmp$metaData$rho[1])
-    }else{
-      globalRhos = c(globalRhos,NA)
-    }
-  }
-  names(globalRhos) = names(nonExpressedGeneList)
-  globalRhos = data.frame(MarkerGroup = factor(names(globalRhos),levels=names(nonExpressedGeneList)),
-                          rho = log10(globalRhos))
-
-  #Now turn it into a bunch of violin plots
+  prep = .prep_marker_distribution_data(sc, nonExpressedGeneList, maxCells, tfidfMin, ...)
+  df = prep$df
+  keep = prep$keep
+  globalRhos = prep$globalRhos
   gg = ggplot(df,aes(MarkerGroup,log10(Values))) +
     geom_violin() +
     geom_jitter(data=df[df$Barcode %in% keep,],aes(size=log10(expCnts)),height=0,width=0.3,alpha=1/2) +
@@ -119,6 +108,31 @@ plotMarkerDistribution = function(sc,nonExpressedGeneList,maxCells=150,tfidfMin=
     ylab('log10(observed/expected)') +
     xlab('Marker group')
   return(gg)
+}
+
+# Internal helper: prepare data for plotMarkerMap
+.prep_marker_map_data <- function(sc, geneSet, DR, ratLims, FDR, useToEst) {
+  if (missing(DR))
+    DR = sc$metaData[, sc$DR]
+  DR = as.data.frame(DR)
+  obs = colSums(sc$toc[geneSet, , drop = FALSE])
+  exp = sc$metaData$nUMIs * sum(sc$soupProfile[geneSet, 'est'])
+  expRatio = obs / exp
+  DR$geneRatio = expRatio[rownames(DR)]
+  colnames(DR)[1:2] = c('RD1', 'RD2')
+  tgtScale = c(ratLims[1], 0, ratLims[2])
+  rescaled = (tgtScale - tgtScale[1]) / (max(tgtScale) - tgtScale[1])
+  DR$logRatio = log10(DR$geneRatio)
+  DR$logRatio[DR$logRatio < ratLims[1]] = ratLims[1]
+  DR$logRatio[DR$logRatio > ratLims[2]] = ratLims[2]
+  DR$logRatio[DR$geneRatio == 0] = NA
+  DR$qVals = p.adjust(ppois(obs - 1, exp, lower.tail = FALSE), method = 'BH')[rownames(DR)]
+  colVal = 'qVals<FDR'
+  if (!is.null(useToEst)) {
+    DR$useToEst = useToEst
+    colVal = 'useToEst'
+  }
+  list(DR = DR, rescaled = rescaled, colVal = colVal)
 }
 
 #' Plot ratio of observed to expected counts on reduced dimension map
@@ -143,43 +157,11 @@ plotMarkerMap = function(sc,geneSet,DR,ratLims=c(-2,2),FDR=0.05,useToEst=NULL,po
   if(!is(sc,'SoupChannel'))
     stop("'sc' must be a SoupChannel object. Got object of class: ", class(sc)[1], 
          ". Create SoupChannel with SoupChannel(tod, toc).")
-  #Try and get DR if missing
-  if(missing(DR))
-    DR = sc$metaData[,sc$DR]
-  #Make sure DR is sensible
-  DR = as.data.frame(DR)
-  if(ncol(DR)<2)
-    stop("Dimension reduction matrix 'DR' must have at least 2 columns for plotting. ",
-         "Got ", ncol(DR), " columns.")
-  if(!(all(rownames(DR) %in% colnames(sc$toc))))
-    stop("Rownames of 'DR' must match cell names in count matrix. ",
-         "Missing cells: ", paste(head(setdiff(rownames(DR), colnames(sc$toc)), 10), collapse=", "))
-  #Get the ratio of observed to expected
-  obs = colSums(sc$toc[geneSet,,drop=FALSE])
-  exp = sc$metaData$nUMIs*sum(sc$soupProfile[geneSet,'est'])
-  expRatio = obs/exp
-  #Add it to the dimensions
-  DR$geneRatio = expRatio[rownames(DR)]
-  colnames(DR)[1:2] = c('RD1','RD2')
-  #Sanitise the values a little
-  tgtScale = c(ratLims[1],0,ratLims[2])
-  #Rescale to be between zero and 1
-  rescaled = (tgtScale-tgtScale[1])/(max(tgtScale)-tgtScale[1])
-  DR$logRatio = log10(DR$geneRatio)
-  #Keep -Inf as NA as we're not really interested in those that have zero expression
-  DR$logRatio[DR$logRatio < ratLims[1]] = ratLims[1]
-  DR$logRatio[DR$logRatio > ratLims[2]] = ratLims[2]
-  DR$logRatio[DR$geneRatio==0]=NA
-  #Calculate the corrected p-value of 
-  DR$qVals = p.adjust(ppois(obs-1,exp,lower.tail=FALSE),method='BH')[rownames(DR)]
-  colVal = 'qVals<FDR'
-  if(!is.null(useToEst)){
-    DR$useToEst = useToEst
-    colVal='useToEst'
-  }
-  #Create the plot
+  prep = .prep_marker_map_data(sc, geneSet, DR, ratLims, FDR, useToEst)
+  DR = prep$DR
+  rescaled = prep$rescaled
+  colVal = prep$colVal
   gg = ggplot(DR,aes(RD1,RD2)) +
-    #Stick NAs underneath
     geom_point(data=DR[is.na(DR$logRatio),],aes_string(colour=colVal),size=naPointSize) +
     geom_point(data=DR[!is.na(DR$logRatio),],aes_string(fill='logRatio',colour=colVal),size=pointSize,shape=pointShape,stroke=pointStroke) +
     scale_colour_manual(values=c(`FALSE`='black',`TRUE`='#009933'))+
@@ -190,7 +172,64 @@ plotMarkerMap = function(sc,geneSet,DR,ratLims=c(-2,2),FDR=0.05,useToEst=NULL,po
                         guide='colorbar',
                         limits=ratLims
                         )
-    gg
+  gg
+}
+
+# Internal helper: prepare data for plotChangeMap
+.prep_change_map_data <- function(sc, cleanedMatrix, geneSet, DR, dataType, logData) {
+  if (missing(DR))
+    DR = sc$metaData[, sc$DR]
+  DR = as.data.frame(DR)
+  colnames(DR)[1:2] = c('RD1', 'RD2')
+  if (dataType == 'soupFrac') {
+    df = DR
+    old = colSums(sc$toc[geneSet, rownames(df), drop = FALSE])
+    new = colSums(cleanedMatrix[geneSet, rownames(df), drop = FALSE])
+    relChange = (old - new) / old
+    df$old = old
+    df$new = new
+    df$relChange = relChange
+    nom = 'SoupFrac'
+    if (logData) {
+      df$relChange = log10(df$relChange)
+      nom = paste0('log10(', nom, ')')
+      zLims = c(-2, 0)
+    } else {
+      zLims = c(0, 1)
+    }
+    df = df[order(!is.na(df$relChange)), ]
+    df$relChange[which(df$relChange < zLims[1])] = zLims[1]
+    df$relChange[which(df$relChange > zLims[2])] = zLims[2]
+    return(list(df = df, nom = nom, zLims = zLims))
+  } else {
+    dfs = list()
+    df = DR
+    df$correction = 'Uncorrected'
+    if (dataType == 'binary') {
+      df$data = colSums(sc$toc[geneSet, rownames(df), drop = FALSE]) > 0
+    } else if (dataType == 'counts') {
+      df$data = colSums(sc$toc[geneSet, rownames(df), drop = FALSE])
+    }
+    if (logData)
+      df$data = log10(df$data)
+    dfs[['raw']] = df
+    df = DR
+    df$correction = 'Corrected'
+    if (dataType == 'binary') {
+      df$data = colSums(cleanedMatrix[geneSet, rownames(df), drop = FALSE]) > 0
+    } else if (dataType == 'counts') {
+      df$data = colSums(cleanedMatrix[geneSet, rownames(df), drop = FALSE])
+    }
+    if (logData)
+      df$data = log10(df$data)
+    dfs[['correctedExpression']] = df
+    dfs = do.call(rbind, dfs)
+    lvls = c('Uncorrected', 'Corrected')
+    dfs$correction = factor(dfs$correction, levels = lvls[lvls %in% dfs$correction])
+    dfs = dfs[order(!is.na(dfs$data)), ]
+    zLims = c(NA, NA)
+    return(list(dfs = dfs, zLims = zLims))
+  }
 }
 
 #' Plot maps comparing corrected/raw expression
@@ -213,39 +252,11 @@ plotChangeMap = function(sc,cleanedMatrix,geneSet,DR,dataType=c('soupFrac','bina
   dataType = match.arg(dataType)
   if(dataType=='binary')
     logData=FALSE
-  #Try and get DR if missing
-  if(missing(DR))
-    DR = sc$metaData[,sc$DR]
-  #Make sure DR is sensible
-  DR = as.data.frame(DR)
-  if(ncol(DR)<2)
-    stop("Dimension reduction matrix 'DR' must have at least 2 columns for plotting. ",
-         "Got ", ncol(DR), " columns.")
-  if(!(all(rownames(DR) %in% colnames(sc$toc))))
-    stop("Rownames of 'DR' must match cell names in count matrix. ",
-         "Missing cells: ", paste(head(setdiff(rownames(DR), colnames(sc$toc)), 10), collapse=", "))
-  colnames(DR)[1:2] = c('RD1','RD2')
-  #Simple one panel version
+  prep = .prep_change_map_data(sc, cleanedMatrix, geneSet, DR, dataType, logData)
   if(dataType=='soupFrac'){
-    df = DR
-    old = colSums(sc$toc[geneSet,rownames(df),drop=FALSE])
-    new = colSums(cleanedMatrix[geneSet,rownames(df),drop=FALSE])
-    relChange = (old-new)/old
-    df$old = old
-    df$new = new
-    df$relChange=relChange
-    nom = 'SoupFrac'
-    if(logData){
-      df$relChange = log10(df$relChange)
-      nom = paste0('log10(',nom,')')
-      zLims=c(-2,0)
-    }else{
-      zLims=c(0,1)
-    }
-    df = df[order(!is.na(df$relChange)),]
-    #Truncate to prevent -Inf -> NA coloured dots
-    df$relChange[which(df$relChange<zLims[1])] = zLims[1]
-    df$relChange[which(df$relChange>zLims[2])] = zLims[2]
+    df = prep$df
+    nom = prep$nom
+    zLims = prep$zLims
     gg = ggplot(df,aes(RD1,RD2)) +
       geom_point(aes(col=relChange),size=pointSize) +
       xlab('ReducedDim1') +
@@ -253,37 +264,8 @@ plotChangeMap = function(sc,cleanedMatrix,geneSet,DR,dataType=c('soupFrac','bina
       labs(colour=nom) + 
       ggtitle('Change in expression due to soup correction')
   }else{
-    dfs=list()
-    #Get the raw data
-    df = DR
-    df$correction = 'Uncorrected'
-    if(dataType=='binary'){
-      df$data = colSums(sc$toc[geneSet,rownames(df),drop=FALSE])>0
-    }else if(dataType=='counts'){
-      df$data = colSums(sc$toc[geneSet,rownames(df),drop=FALSE])
-    }
-    if(logData)
-      df$data = log10(df$data)
-    dfs[['raw']]=df
-    #And the corrected expression
-    df = DR
-    df$correction = 'Corrected'
-    if(dataType=='binary'){
-      df$data = colSums(cleanedMatrix[geneSet,rownames(df),drop=FALSE])>0
-    }else if(dataType=='counts'){
-      df$data = colSums(cleanedMatrix[geneSet,rownames(df),drop=FALSE])
-    }
-    if(logData)
-      df$data = log10(df$data)
-    dfs[['correctedExpression']]=df
-    dfs = do.call(rbind,dfs)
-    #Define order to plot
-    lvls = c('Uncorrected','Corrected')
-    dfs$correction = factor(dfs$correction,levels=lvls[lvls%in%dfs$correction])
-    #Stick the NAs at the bottom
-    dfs = dfs[order(!is.na(dfs$data)),]
-    zLims=c(NA,NA)
-    #Now make the plot
+    dfs = prep$dfs
+    zLims = prep$zLims
     gg = ggplot(dfs,aes(RD1,RD2)) +
       geom_point(aes(colour=data),size=pointSize) +
       xlab('ReducedDim1') +
@@ -292,7 +274,6 @@ plotChangeMap = function(sc,cleanedMatrix,geneSet,DR,dataType=c('soupFrac','bina
       ggtitle('Comparison of before and after correction') +
       facet_wrap(~correction)
   }
-  #Make less ugly colour scheme
   if(dataType!='binary')
     gg = gg + scale_colour_gradientn(colours=c('#fff5eb','#fee6ce','#fdd0a2','#fdae6b','#fd8d3c','#f16913','#d94801','#a63603','#7f2704'),limits=zLims)
   gg
