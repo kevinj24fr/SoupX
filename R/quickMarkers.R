@@ -103,7 +103,7 @@ quickMarkers = function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
   colnames(sndBestName) = colnames(tf)
   rownames(sndBestName) = rownames(tf)
   
-  #Now get the top N for each group - optimized
+  # Now get the top N for each group - optimized
   w = lapply(seq_len(ncol(nObs)), function(e){
     o = order(score[,e], decreasing=TRUE)
     if(sum(qvals[,e]<FDR)>=N){
@@ -113,13 +113,26 @@ quickMarkers = function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
     }
   })
   
-  #Now construct the data.frame with everything - optimized
+  # Now construct the data.frame with everything - optimized
   if(length(unlist(w)) == 0) {
     warning("No markers found passing FDR threshold. Returning empty result.")
     return(data.frame())
   }
   
   ww = cbind(unlist(w,use.names=FALSE),rep(seq_len(ncol(nObs)),lengths(w)))
+  
+  # Ensure all indices are valid
+  valid_rows = ww[,1] <= nrow(nObs) & ww[,1] > 0
+  valid_cols = ww[,2] <= ncol(nObs) & ww[,2] > 0
+  valid_indices = valid_rows & valid_cols
+  
+  if(sum(valid_indices) == 0) {
+    warning("No valid marker indices found. Returning empty result.")
+    return(data.frame())
+  }
+  
+  ww = ww[valid_indices, , drop = FALSE]
+  
   out = data.frame(gene = rownames(nObs)[ww[,1]],
                    cluster = colnames(nObs)[ww[,2]],
                    geneFrequency = tf[ww],

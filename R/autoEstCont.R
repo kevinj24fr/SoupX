@@ -76,13 +76,20 @@
   
   # Fix the logical subscript issue by properly handling the estimateNonExpressingCells output
   # ute has cell names as rows, we need to aggregate by cluster
-  if(length(ssc$metaData$clusters) == 1) {
+  if(is.null(ssc$metaData$clusters) || length(ssc$metaData$clusters) == 1) {
     # Single cluster case - aggregate all cells
     cluster_cells = rownames(sc$metaData)
-    ute_agg = matrix(colMeans(ute[cluster_cells, , drop = FALSE]), nrow = 1)
-    rownames(ute_agg) = rownames(ssc$metaData)
-    colnames(ute_agg) = colnames(ute)
-    ute = t(ute_agg)
+    if(length(cluster_cells) > 0) {
+      ute_agg = matrix(colMeans(ute[cluster_cells, , drop = FALSE]), nrow = 1)
+      rownames(ute_agg) = rownames(ssc$metaData)
+      colnames(ute_agg) = colnames(ute)
+      ute = t(ute_agg)
+    } else {
+      # Handle empty case
+      ute = matrix(0, nrow = 1, ncol = ncol(ute))
+      rownames(ute) = rownames(ssc$metaData)
+      colnames(ute) = colnames(ute)
+    }
   } else {
     # Multiple clusters case - aggregate by cluster
     cluster_names = rownames(ssc$metaData)

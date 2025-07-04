@@ -29,7 +29,10 @@ expandClusters = function(clustSoupCnts,cellObsCnts,clusters,cellWeights,verbose
     
     #Which cells
     wCells = which(clusters==cluster_name)
-    if(length(wCells) == 0) next
+    if(length(wCells) == 0) {
+      if(verbose>1) message(sprintf("No cells found for cluster %s, skipping", cluster_name))
+      next
+    }
     
     #How should they be weighted
     ww = ws[wCells]/sum(ws[wCells])
@@ -72,7 +75,11 @@ expandClusters = function(clustSoupCnts,cellObsCnts,clusters,cellWeights,verbose
         # Vectorized allocation for better performance
         tmp_results <- lapply(w_split, function(e) {
           gene_idx <- expCnts@i[e[1]]+1
-          alloc(nSoup[gene_idx], expCnts@x[e], ww[expCnts@j[e]+1])
+          if(gene_idx <= length(nSoup)) {
+            alloc(nSoup[gene_idx], expCnts@x[e], ww[expCnts@j[e]+1])
+          } else {
+            expCnts@x[e]  # Keep original values if gene index is out of bounds
+          }
         })
         
         # Update values in one operation

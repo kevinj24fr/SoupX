@@ -36,12 +36,49 @@
   validate_clusters(clusters, colnames(sc$toc))
   s = split(colnames(sc$toc), clusters[colnames(sc$toc)])
   tmp = sc
-  tmp$toc = do.call(cbind, lapply(s, function(e) rowSums(sc$toc[, e, drop = FALSE])))
-  tmp$toc = Matrix(tmp$toc, sparse = TRUE)
+  
+  # Handle single cluster case properly
+  if(length(s) == 1) {
+    cluster_name <- names(s)[1]
+    cluster_cells = s[[1]]
+    if(length(cluster_cells) > 0) {
+      tmp$toc = Matrix(rowSums(sc$toc[, cluster_cells, drop = FALSE]), sparse = TRUE)
+      colnames(tmp$toc) <- cluster_name
+      rownames(tmp$toc) <- rownames(sc$toc)
+    } else {
+      # Handle empty cluster case
+      tmp$toc = Matrix(0, nrow = nrow(sc$toc), ncol = 1, sparse = TRUE)
+      colnames(tmp$toc) <- cluster_name
+      rownames(tmp$toc) <- rownames(sc$toc)
+    }
+  } else {
+    tmp$toc = do.call(cbind, lapply(s, function(e) {
+      if(length(e) > 0) {
+        rowSums(sc$toc[, e, drop = FALSE])
+      } else {
+        rep(0, nrow(sc$toc))
+      }
+    }))
+    tmp$toc = Matrix(tmp$toc, sparse = TRUE)
+    if (is.null(colnames(tmp$toc))) colnames(tmp$toc) <- names(s)
+    rownames(tmp$toc) <- rownames(sc$toc)
+  }
+  
+  # Ensure metadata is properly constructed
   tmp$metaData = data.frame(
-    nUMIs = sapply(s, function(e) sum(sc$metaData[e, 'nUMIs'])),
-    rho = sapply(s, function(e) sum(sc$metaData[e, 'rho'] * sc$metaData[e, 'nUMIs']) / sum(sc$metaData[e, 'nUMIs']))
+    nUMIs = sapply(s, function(e) {
+      if(length(e) > 0) sum(sc$metaData[e, 'nUMIs']) else 0
+    }),
+    rho = sapply(s, function(e) {
+      if(length(e) > 0) {
+        sum(sc$metaData[e, 'rho'] * sc$metaData[e, 'nUMIs']) / sum(sc$metaData[e, 'nUMIs'])
+      } else {
+        0.1  # Default contamination fraction
+      }
+    }),
+    row.names = names(s)
   )
+  
   out = adjustCounts(tmp, clusters = FALSE, method = method, roundToInt = FALSE, verbose = verbose, tol = tol, pCut = pCut)
   out = tmp$toc - out
   out = expandClusters(out, sc$toc, clusters, sc$metaData$nUMIs * sc$metaData$rho, verbose = verbose, ...)

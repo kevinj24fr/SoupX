@@ -64,7 +64,30 @@ estimateNonExpressingCells = function(sc,nonExpressedGeneList,clusters=NULL,maxi
   s = split(names(clusters),clusters)
   clustExp = ppois(cnts-1,exp,lower.tail=FALSE)
   clustExp = t(apply(clustExp,1,p.adjust,method='BH'))
-  clustExp = do.call(rbind,lapply(s,function(e) apply(clustExp[,e,drop=FALSE],1,min)))
+  
+  # Handle single cluster case properly
+  if(length(s) == 1) {
+    cluster_name <- names(s)[1]
+    cluster_cells = s[[1]]
+    if(length(cluster_cells) > 0) {
+      clustExp = matrix(apply(clustExp[,cluster_cells,drop=FALSE],1,min), ncol=1)
+      colnames(clustExp) <- cluster_name
+      rownames(clustExp) <- rownames(cnts)
+    } else {
+      # Handle empty cluster case
+      clustExp = matrix(FALSE, nrow=nrow(cnts), ncol=1)
+      colnames(clustExp) <- cluster_name
+      rownames(clustExp) <- rownames(cnts)
+    }
+  } else {
+    clustExp = do.call(rbind,lapply(s,function(e) {
+      if(length(e) > 0) {
+        apply(clustExp[,e,drop=FALSE],1,min)
+      } else {
+        rep(FALSE, nrow(clustExp))
+      }
+    }))
+  }
   clustExp = clustExp>=FDR
   #Expand it out into a full cell matrix
   clustExp = clustExp[match(clusters,rownames(clustExp)),,drop=FALSE]
