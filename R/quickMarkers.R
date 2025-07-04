@@ -54,7 +54,20 @@ quickMarkers = function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
     cluster_cells <- which(clusters == cluster_name)
     if(length(cluster_cells) > 0) {
       cluster_data <- toc[, cluster_cells, drop=FALSE]
-      cluster_data <- cluster_data[cluster_data@x > expressCut, , drop=FALSE]
+      # Filter by expression threshold properly for sparse matrices
+      if(length(cluster_data@x) > 0) {
+        # Create a logical mask for the non-zero elements
+        expr_mask <- cluster_data@x > expressCut
+        if(any(expr_mask)) {
+          # Keep only the elements that pass the threshold
+          cluster_data@x <- cluster_data@x[expr_mask]
+          cluster_data@i <- cluster_data@i[expr_mask]
+          cluster_data@j <- cluster_data@j[expr_mask]
+        } else {
+          # No elements pass threshold, create empty matrix
+          cluster_data <- cluster_data[, integer(0), drop=FALSE]
+        }
+      }
       if(length(cluster_data@x) > 0) {
         gene_counts <- table(factor(gene_names[cluster_data@i + 1], levels=gene_names))
         # Always coerce to correct length and set names
@@ -72,9 +85,25 @@ quickMarkers = function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
   }
   
   #Calculate the observed and total frequency - vectorized
-  nTot = rowSums(nObs)
-  tf = t(t(nObs)/as.integer(clCnts[colnames(nObs)]))
-  ntf = t(t(nTot - nObs)/as.integer(ncol(toc)-clCnts[colnames(nObs)]))
+  # Use Matrix::rowSums for sparse matrices
+  if(inherits(nObs, "Matrix")) {
+    nTot = Matrix::rowSums(nObs)
+  } else {
+    nTot = rowSums(nObs)
+  }
+  # Ensure nTot is a vector for single-cluster case
+  if(length(cluster_names) == 1) {
+    nTot = as.numeric(nTot)
+  }
+  # Convert sparse matrix to regular matrix for transpose operations
+  nObs_mat = as.matrix(nObs)
+  tf = t(t(nObs_mat)/as.integer(clCnts[colnames(nObs)]))
+  # Handle single-cluster case where nTot is a vector
+  if(length(cluster_names) == 1) {
+    ntf = t(t(nTot - nObs_mat)/as.integer(ncol(toc)-clCnts[colnames(nObs)]))
+  } else {
+    ntf = t(t(nTot - nObs_mat)/as.integer(ncol(toc)-clCnts[colnames(nObs)]))
+  }
   idf = log(ncol(toc)/nTot)
   score = tf*idf
   
@@ -93,10 +122,17 @@ quickMarkers = function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
   for(i in seq_len(ncol(tf))) {
     other_cols <- setdiff(seq_len(ncol(tf)), i)
     if(length(other_cols) > 0) {
-      max_vals <- apply(tf[, other_cols, drop=FALSE], 1, max)
-      max_idx <- apply(tf[, other_cols, drop=FALSE], 1, which.max)
-      sndBest[, i] <- max_vals
-      sndBestName[, i] <- colnames(tf)[other_cols[max_idx]]
+      other_data <- tf[, other_cols, drop=FALSE]
+      if(ncol(other_data) > 0 && nrow(other_data) > 0) {
+        max_vals <- apply(other_data, 1, function(x) {
+          if(all(is.na(x)) || all(x == 0)) return(0) else max(x, na.rm=TRUE)
+        })
+        max_idx <- apply(other_data, 1, function(x) {
+          if(all(is.na(x)) || all(x == 0)) return(1) else which.max(x)
+        })
+        sndBest[, i] <- max_vals
+        sndBestName[, i] <- colnames(tf)[other_cols[max_idx]]
+      }
     }
   }
   colnames(sndBest) = colnames(tf)
