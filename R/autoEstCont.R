@@ -194,7 +194,10 @@ autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMark
     mat = sc$toc[, e, drop = FALSE]
     # If e is length 1, rowSums returns a vector, so coerce to matrix
     rs = rowSums(mat)
-    if (is.null(dim(rs))) rs = matrix(rs, ncol = 1, dimnames = list(names(rs), e))
+    if (is.null(dim(rs))) {
+      # For single cell, use the cell name as column name
+      rs = matrix(rs, ncol = 1, dimnames = list(names(rs), paste(e, collapse = "_")))
+    }
     rs
   }))
   if (is.null(colnames(tmp))) colnames(tmp) <- names(s)
