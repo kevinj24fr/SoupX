@@ -173,11 +173,22 @@
 #' Automatically calculate the contamination fraction
 #' (refactored for maintainability, API unchanged)
 autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMarkers=100,contaminationRange=c(0.01,0.8),rhoMaxFDR=0.2,priorRho=0.05,priorRhoStdDev=0.10,doPlot=TRUE,forceAccept=FALSE,verbose=TRUE){
-  validate_soup_channel(sc, require_soup_profile = TRUE, require_clusters = TRUE)
+  validate_soup_channel(sc, require_soup_profile = TRUE, require_clusters = FALSE)
   if(length(contaminationRange) != 2 || any(contaminationRange < 0) || any(contaminationRange > 1) || contaminationRange[1] >= contaminationRange[2]) {
     stop("contaminationRange must be a vector of length 2 with values between 0 and 1, where first value < second value. ",
          "Got: [", paste(contaminationRange, collapse=", "), "]")
   }
+  
+  # Check if clusters are available
+  if(!"clusters" %in% colnames(sc$metaData)) {
+    if(verbose) {
+      message("No clustering information found. Creating single cluster for all cells.")
+      message("For better results, consider providing clustering information using setClusters().")
+    }
+    # Create a single cluster for all cells
+    sc$metaData$clusters <- rep("Cluster1", nrow(sc$metaData))
+  }
+  
   s = split(rownames(sc$metaData), sc$metaData$clusters)
   tmp = do.call(cbind, lapply(s, function(e) rowSums(sc$toc[, e, drop = FALSE])))
   ssc = sc
