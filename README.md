@@ -2,7 +2,7 @@
 
 Enhanced version of SoupX with improved performance, validation, testing, and comprehensive visualization capabilities.
 
-## 🚀 Key Improvements
+## Key Improvements
 
 ### Performance Optimizations
 - **10-50x faster** core functions through vectorized operations
@@ -24,7 +24,7 @@ Enhanced version of SoupX with improved performance, validation, testing, and co
 - **Automated Reporting** - Generate publication-ready reports
 - **Interactive Options** - Ready for Shiny/plotly integration
 
-## 📊 New Visualization Functions
+## New Visualization Functions
 
 ### Quality Control Dashboard
 ```r
@@ -65,12 +65,12 @@ report <- generateSoupXReport(sc, adjusted_matrix,
                              output_dir = "./soupx_report")
 ```
 
-## 🛠 Installation
+## Installation
 
 ```r
 # Install from GitHub (recommended)
 if (!require(devtools)) install.packages("devtools")
-devtools::install_github("your-username/SoupX")
+devtools::install_github("kevinj24fr/SoupX")
 
 # Or install from local source
 devtools::install_local("path/to/SoupX")
@@ -94,7 +94,7 @@ adjusted <- adjustCounts(sc)
 report <- generateSoupXReport(sc, adjusted)
 ```
 
-## 🔧 Performance Benchmarking
+## Performance Benchmarking
 
 ```r
 # Benchmark performance
@@ -102,7 +102,7 @@ benchmark_results <- benchmark_soupx(sc, iterations = 5)
 print(benchmark_results)
 ```
 
-## 🧪 Testing
+## Testing
 
 ```r
 # Run test suite
@@ -112,7 +112,7 @@ devtools::test()
 source("test_data/visualization_examples.R")
 ```
 
-## 📈 Visualization Examples
+## Visualization Examples
 
 See `test_data/visualization_examples.R` for comprehensive examples of all new visualization capabilities.
 
@@ -125,18 +125,7 @@ See `test_data/visualization_examples.R` for comprehensive examples of all new v
 6. **Performance Monitoring** - Track computational performance
 7. **Interactive Options** - Ready for interactive exploration
 
-## 🔍 Critical Fixes for 10x Data
-
-**Important**: When loading 10x Genomics data, ensure proper matrix naming:
-
-```r
-# Fix for 10x data with duplicate gene symbols
-sc <- load10X("path/to/10x/data")
-# Use Ensembl IDs as row names to avoid duplicates
-rownames(sc$toc) <- make.unique(rownames(sc$toc))
-```
-
-## 📋 Changelog
+## Changelog
 
 ### Version 1.6.2 (Current)
 - **NEW**: Comprehensive visualization suite
@@ -160,18 +149,6 @@ rownames(sc$toc) <- make.unique(rownames(sc$toc))
 - **NEW**: Test framework
 - **IMPROVED**: Documentation
 - **FIXED**: 10x data loading issues
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## 📄 License
-
-GPL-3
 
 ## 🙏 Acknowledgments
 
