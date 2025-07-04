@@ -78,9 +78,10 @@
   # ute has cell names as rows, we need to aggregate by cluster
   if(is.null(ssc$metaData$clusters) || length(ssc$metaData$clusters) == 1) {
     # Single cluster case - aggregate all cells
-    cluster_cells = rownames(sc$metaData)
-    if(length(cluster_cells) > 0) {
-      ute_agg = matrix(colMeans(ute[cluster_cells, , drop = FALSE]), nrow = 1)
+    # Get the actual cell names that exist in ute
+    available_cells = intersect(rownames(sc$metaData), rownames(ute))
+    if(length(available_cells) > 0) {
+      ute_agg = matrix(colMeans(ute[available_cells, , drop = FALSE]), nrow = 1)
       rownames(ute_agg) = rownames(ssc$metaData)
       colnames(ute_agg) = colnames(ute)
       ute = t(ute_agg)
@@ -100,8 +101,10 @@
     for(i in seq_along(cluster_names)) {
       cluster_name = cluster_names[i]
       cluster_cells = rownames(sc$metaData)[sc$metaData$clusters == cluster_name]
-      if(length(cluster_cells) > 0) {
-        ute_agg[i, ] = colMeans(ute[cluster_cells, , drop = FALSE])
+      # Get the actual cell names that exist in ute
+      available_cluster_cells = intersect(cluster_cells, rownames(ute))
+      if(length(available_cluster_cells) > 0) {
+        ute_agg[i, ] = colMeans(ute[available_cluster_cells, , drop = FALSE])
       }
     }
     ute = t(ute_agg)
