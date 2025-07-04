@@ -1,9 +1,9 @@
 * using log directory ‘/Users/kevin/SoupX/..Rcheck’
-* using R version 4.5.0 (2025-04-11)
-* using platform: aarch64-apple-darwin24.2.0
+* using R version 4.5.1 (2025-06-13)
+* using platform: aarch64-apple-darwin24.4.0
 * R was compiled by
-    Apple clang version 16.0.0 (clang-1600.0.26.6)
-    GNU Fortran (Homebrew GCC 14.2.0_1) 14.2.0
+    Apple clang version 17.0.0 (clang-1700.0.13.3)
+    GNU Fortran (Homebrew GCC 15.1.0) 15.1.0
 * running under: macOS Sequoia 15.3.1
 * using session charset: UTF-8
 * using options ‘--no-manual --no-vignettes’
@@ -12,12 +12,11 @@
 * package encoding: UTF-8
 * checking package namespace information ... OK
 * checking package dependencies ... ERROR
-Packages required but not available: 'ggplot2', 'Seurat'
+Packages required but not available: 'Seurat', 'ggplot2'
 
-Packages suggested but not available:
-  'knitr', 'rstan', 'DropletUtils', 'rmarkdown', 'formatR', 'testthat'
+Package suggested but not available: ‘testthat’
 
-VignetteBuilder package required for checking but not installed: ‘knitr’
+VignetteBuilder package not declared: ‘knitr’
 
 The suggested packages are required for a complete check.
 Checking can be attempted without them by setting the environment

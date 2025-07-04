@@ -213,38 +213,6 @@ adjustCounts = function(sc,clusters=NULL,method=c('subtraction','soupOnly','mult
       out = out - do.call(cbind,lapply(seq(ncol(out)),function(e) alloc(expSoupCnts[e],out[,e],soupFrac)))
       #out = as(out,'dgTMatrix')
       out = as(as(as(out, "dMatrix"), "generalMatrix"), "TsparseMatrix")
-      #Iteratively remove until we've removed the expected number of counts
-      #How many counts should we have left when we're done?
-      #tgts = sc$metaData$nUMIs - expSoupCnts
-      #Which genes do we still need to bother trying to remove counts from in which cells
-      #toAdjust = seq_along(out@i)
-      #if(verbose>0)
-      #  message("Subtracting contaminating counts")
-      #while(TRUE){
-      #  #How many left to do?
-      #  toDo = colSums(out)-tgts
-      #  #Get the soup frac correction factors.
-      #  tmp = rep(1,length(toDo))
-      #  soupFracSum = sapply(split(soupFrac[out@i[toAdjust]+1],out@j[toAdjust]+1),sum)
-      #  tmp[as.numeric(names(soupFracSum))]=soupFracSum
-      #  toDo = toDo/tmp
-      #  #Do the adjustment
-      #  out@x[toAdjust] = out@x[toAdjust]-soupFrac[out@i[toAdjust]+1]*toDo[out@j[toAdjust]+1]
-      #  #Only keep updating those that need it
-      #  toAdjust = toAdjust[out@x[toAdjust]>0]
-      #  out@x[out@x<0]=0
-      #  if(verbose>1)
-      #    print(quantile(colSums(out)-tgts))
-      #  if(max(colSums(out)-tgts)<tol)
-      #    break
-      #}
-      ##This is the clearer but slower version of above
-      #out@x = pmax(0,out@x - soupFrac[out@i+1]*expSoupCnts[out@j+1])
-      #while(max(colSums(out)-tgts)>tol){
-      #  toDo = colSums(out)-tgts
-      #  out@x = pmax(0,out@x - soupFrac[out@i+1]*toDo[out@j+1])
-      #  print(quantile(colSums(out)-tgts))
-      #}
       #Fix the object internals
       w = which(out@x>0)
       out = sparseMatrix(i=out@i[w]+1,

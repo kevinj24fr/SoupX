@@ -78,8 +78,7 @@ autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMark
   tgts = head(filtPass$gene,n=maxMarkers)
   if(verbose)
     message(sprintf("%d genes passed tf-idf cut-off and %d soup quantile filter.  Taking the top %d.",nrow(mrks),nrow(filtPass),length(tgts)))
-  #mrks = mrks[mrks$gene %in% tgts,]
-  #tgts = head(mrks$gene,nMarks)
+
   if(length(tgts)==0){
     stop("No suitable marker genes found for contamination estimation. ",
          "Try: (1) reducing tfidfMin (currently ", tfidfMin, ") to accept less specific markers, ",
@@ -128,10 +127,7 @@ autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMark
   dd$tfidf = mrks$tfidf[dd$geneIdx]
   dd$soupIdx = match(dd$gene,rownames(soupProf))
   dd$soupExp = soupProf$est[dd$soupIdx]
-  dd$useEst = #dd$obsCnt >= minCnts & 
-    #dd$isExpressedFDR < rhoMaxFDR & 
-    #dd$rhoIdx <= min(clustPerGene,floor(ncol(rhoIdx)*maxClustFrac)) & 
-    dd$passNonExp
+  dd$useEst = dd$passNonExp
   #The logic of piling up desity around the true value gets wonky if the number of estimates is low
   if(sum(dd$useEst)<10)
     warning("Fewer than 10 independent estimates, rho estimation is likely to be unstable.  Consider reducing tfidfMin or increasing SoupMin.")
@@ -146,7 +142,6 @@ autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMark
   dd$rhoLow=sapply(seq(nrow(dd)),function(e) p.L(dd$obsCnt[e],alpha)/dd$expCnt[e])
   rhoProbes=seq(0,1,.001)
   #Using 95% confidence intervals
-  #tmp = sapply(rhoProbes,function(e) {w=which(dd$useEst & dd$tfidf<1.5);sum(e>=dd$rhoLow[w] & e<=dd$rhoHigh[w])/length(w)})
   #Do a posterior estimation instead.  Use gamma prior defined by mode (priorRho) and standard deviation (priorRhoStdDev), which yields a posterior distribution for gamma of the form dgamma(rho,obsCnt+k,scale=theta/(1+theta*expCnts)). Where k and theta are the parameters for prior distribution derived using the above constraints.
   v2 = (priorRhoStdDev/priorRho)**2
   k = 1 +v2**-2/2*(1+sqrt(1+4*v2))
@@ -184,16 +179,7 @@ autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMark
            lty=c(2,1,1),
            col=c('black','black','red'),
            bty='n')
-    #plot(0,
-    #     xlim=c(0,1),
-    #     ylim=c(0,max(tmp$y)),
-    #     type='n',
-    #     frame.plot=FALSE,
-    #     xlab='Contamination Fraction',
-    #     ylab='Density'
-    #     )
-    #lines(tmp$x,tmp$y)
-    #abline(v=contEst,col='red')
+
   }
   sc$fit = list(dd=dd,
                 priorRho=priorRho,

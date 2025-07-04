@@ -84,9 +84,7 @@ plotMarkerDistribution = function(sc,nonExpressedGeneList,maxCells=150,tfidfMin=
                   Values=unlist(tst,use.names=FALSE))
   #Work out which cells to over-plot
   keep = sample(colnames(sc$toc),min(ncol(sc$toc),maxCells))
-  #Calculate p-value for each being over some cut-off 
-  #qVals = do.call(rbind,lapply(nonExpressedGeneList,function(e) p.adjust(pbinom(colSums(sc$toc[e,,drop=FALSE])-1,sc$metaData$nUMIs,minRho*sum(sc$soupProfile[e,'est']),lower.tail=FALSE),method='BH')))
-  #df$qVals = qVals[cbind(match(df[,1],rownames(qVals)),match(df[,2],colnames(qVals)))]
+  #Calculate p-value for each being over some cut-off
   df$nUMIs = sc$metaData[df$Barcode,'nUMIs']
   #Get the expected number of counts
   expCnts = do.call(rbind,lapply(nonExpressedGeneList,function(e) sc$metaData$nUMIs*sum(sc$soupProfile[e,'est'])))
@@ -108,10 +106,7 @@ plotMarkerDistribution = function(sc,nonExpressedGeneList,maxCells=150,tfidfMin=
   names(globalRhos) = names(nonExpressedGeneList)
   globalRhos = data.frame(MarkerGroup = factor(names(globalRhos),levels=names(nonExpressedGeneList)),
                           rho = log10(globalRhos))
-  #tmp = df[df$qVals>0.05,]
-  #globRhos = sapply(split(tmp,tmp$MarkerGroup),function(e) sum(sc$toc[nonExpressedGeneList[[unique(e$MarkerGroup)]],e$Barcode])/sum(e$nUMIs)/sum(sc$soupProfile[nonExpressedGeneList[[unique(e$MarkerGroup)]],'est']))
-  #globRhos = data.frame(MarkerGroup=factor(names(globRhos),levels=names(nonExpressedGeneList)),
-  #                      rho = log10(globRhos))
+
   #Now turn it into a bunch of violin plots
   gg = ggplot(df,aes(MarkerGroup,log10(Values))) +
     geom_violin() +
