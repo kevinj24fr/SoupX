@@ -188,10 +188,16 @@ autoEstCont = function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMark
          "Got: [", paste(contaminationRange, collapse=", "), "]")
   }
   
-
-  
+  # Robust cluster aggregation for single or multiple clusters
   s = split(rownames(sc$metaData), sc$metaData$clusters)
-  tmp = do.call(cbind, lapply(s, function(e) rowSums(sc$toc[, e, drop = FALSE])))
+  tmp = do.call(cbind, lapply(s, function(e) {
+    mat = sc$toc[, e, drop = FALSE]
+    # If e is length 1, rowSums returns a vector, so coerce to matrix
+    rs = rowSums(mat)
+    if (is.null(dim(rs))) rs = matrix(rs, ncol = 1, dimnames = list(names(rs), e))
+    rs
+  }))
+  if (is.null(colnames(tmp))) colnames(tmp) <- names(s)
   ssc = sc
   ssc$toc = tmp
   ssc$metaData = data.frame(nUMIs = colSums(tmp), row.names = colnames(tmp))
