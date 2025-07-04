@@ -43,8 +43,8 @@ quickMarkers = function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
   gene_names <- rownames(toc)
   cluster_names <- names(clCnts)
   
-  # Create sparse matrix for observed counts
-  nObs <- Matrix(0, nrow=length(gene_names), ncol=length(cluster_names), sparse=TRUE)
+  # Create regular matrix for observed counts to avoid sparse matrix dimnames issues
+  nObs <- matrix(0, nrow=length(gene_names), ncol=length(cluster_names))
   rownames(nObs) <- gene_names
   colnames(nObs) <- cluster_names
   
@@ -73,7 +73,8 @@ quickMarkers = function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
         # Always coerce to correct length and set names
         gene_counts <- as.numeric(gene_counts)
         names(gene_counts) <- gene_names
-        nObs[, i] <- gene_counts
+        # Ensure the assignment doesn't cause dimnames issues
+        nObs[, i] <- gene_counts[gene_names]
       }
     }
   }
@@ -85,18 +86,13 @@ quickMarkers = function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
   }
   
   #Calculate the observed and total frequency - vectorized
-  # Use Matrix::rowSums for sparse matrices
-  if(inherits(nObs, "Matrix")) {
-    nTot = Matrix::rowSums(nObs)
-  } else {
-    nTot = rowSums(nObs)
-  }
+  nTot = rowSums(nObs)
   # Ensure nTot is a vector for single-cluster case
   if(length(cluster_names) == 1) {
     nTot = as.numeric(nTot)
   }
-  # Convert sparse matrix to regular matrix for transpose operations
-  nObs_mat = as.matrix(nObs)
+  # Use regular matrix for all operations
+  nObs_mat = nObs
   tf = t(t(nObs_mat)/as.integer(clCnts[colnames(nObs)]))
   # Handle single-cluster case where nTot is a vector
   if(length(cluster_names) == 1) {
@@ -119,19 +115,27 @@ quickMarkers = function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
   sndBest = matrix(0, nrow=nrow(tf), ncol=ncol(tf))
   sndBestName = matrix("", nrow=nrow(tf), ncol=ncol(tf))
   
-  for(i in seq_len(ncol(tf))) {
-    other_cols <- setdiff(seq_len(ncol(tf)), i)
-    if(length(other_cols) > 0) {
-      other_data <- tf[, other_cols, drop=FALSE]
-      if(ncol(other_data) > 0 && nrow(other_data) > 0) {
-        max_vals <- apply(other_data, 1, function(x) {
-          if(all(is.na(x)) || all(x == 0)) return(0) else max(x, na.rm=TRUE)
-        })
-        max_idx <- apply(other_data, 1, function(x) {
-          if(all(is.na(x)) || all(x == 0)) return(1) else which.max(x)
-        })
-        sndBest[, i] <- max_vals
-        sndBestName[, i] <- colnames(tf)[other_cols[max_idx]]
+  # Handle single-cluster case specially
+  if(length(cluster_names) == 1) {
+    # For single cluster, there is no "second best", so set to 0
+    sndBest[, 1] <- 0
+    sndBestName[, 1] <- ""
+  } else {
+    # Multiple clusters case
+    for(i in seq_len(ncol(tf))) {
+      other_cols <- setdiff(seq_len(ncol(tf)), i)
+      if(length(other_cols) > 0) {
+        other_data <- tf[, other_cols, drop=FALSE]
+        if(ncol(other_data) > 0 && nrow(other_data) > 0) {
+          max_vals <- apply(other_data, 1, function(x) {
+            if(all(is.na(x)) || all(x == 0)) return(0) else max(x, na.rm=TRUE)
+          })
+          max_idx <- apply(other_data, 1, function(x) {
+            if(all(is.na(x)) || all(x == 0)) return(1) else which.max(x)
+          })
+          sndBest[, i] <- max_vals
+          sndBestName[, i] <- colnames(tf)[other_cols[max_idx]]
+        }
       }
     }
   }
