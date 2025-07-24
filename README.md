@@ -5,19 +5,8 @@
 
 ---
 
-**This is the official, production-ready release of SoupX with all known bugs fixed, robust error handling, and comprehensive test coverage.**
-
-- All syntax and logic errors have been fixed by hand, not by automated scripts.
-- All validation, error handling, and edge cases are covered by tests.
-- All documentation and examples are up to date and reflect real-world usage.
-- The only known limitation is that the toy example in the documentation may not work for automated contamination estimation due to the nature of the data, not a code bug.
-
----
-
 ## Release Notes: Version 1.6.4
 
-- **FIXED:** All assignment and argument errors (`<-` vs `=`) in function calls, data.frame, and list construction.
-- **FIXED:** All subsetting errors (`drop <- FALSE` vs `drop = FALSE`).
 - **FIXED:** Validation logic for all numeric parameters and input checks.
 - **FIXED:** Documentation and examples updated for clarity and accuracy.
 - **IMPROVED:** Optional dependencies (Seurat, ggplot2) are handled gracefully.
@@ -26,12 +15,6 @@
 - **STANDARDIZED:** Code style and documentation across all functions.
 - **OPTIMIZED:** Memory usage and sparse matrix operations.
 - **EXPANDED:** Test coverage for all core and edge-case scenarios.
-
----
-
-## Example Limitation
-
-> **Note:** The toy dataset (`scToy`) included for examples is too small and homogeneous for automated contamination estimation (`autoEstCont`). This is a limitation of the example data, not a bug in the codebase. All core functions work as intended with real single-cell data.
 
 ---
 
