@@ -1,0 +1,42 @@
+SoupX - Enhanced Single Cell RNA-seq Contamination Correction
+Copyright (c) 2025 Kevin J.
+
+This software is distributed under a dual licensing model:
+
+1. ACADEMIC AND NON-COMMERCIAL USE
+   Free for academic institutions, research institutes, and non-profit 
+   organizations for non-commercial research and educational purposes.
+
+2. COMMERCIAL USE
+   Requires a separate commercial license for any for-profit use.
+   Contact kevin.joseph@uniklinik-freiburg.de for commercial licensing.
+
+ORIGINAL WORK ACKNOWLEDGMENT:
+This software is based on the original SoupX package by Matthew Young:
+- Young MD, Behjati S. SoupX removes ambient RNA contamination from droplet 
+  based single cell RNA sequencing data. GigaScience. 2020.
+- Original repository: https://github.com/constantAmateur/SoupX
+
+ENHANCEMENTS:
+This version includes significant robustness improvements, enhanced error 
+handling, comprehensive validation, and production-ready architecture 
+developed by Kevin J.
+
+THIRD-PARTY COMPONENTS:
+This software may include or depend on third-party open source components.
+See individual component licenses for details.
+
+CITATION REQUIREMENTS:
+All users must cite:
+1. The original SoupX work (see above)
+2. This enhanced version: Enhanced SoupX with Robustness Improvements. 2025.
+   https://github.com/kevinj24fr/SoupX
+
+DISCLAIMER:
+This software is provided "as is" without warranty of any kind.
+See LICENSE file for complete terms and conditions.
+
+For licensing questions: kevin.joseph@uniklinik-freiburg.de
+For technical support: See GitHub issues or contact information above.
+
+Last updated: 2025 

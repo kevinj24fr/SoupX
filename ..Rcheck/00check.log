@@ -6,7 +6,7 @@
     GNU Fortran (Homebrew GCC 15.1.0) 15.1.0
 * running under: macOS Sequoia 15.3.1
 * using session charset: UTF-8
-* using options ‘--no-manual --no-vignettes’
+* using options ‘--no-manual --no-vignettes --no-build-vignettes’
 * checking for file ‘./DESCRIPTION’ ... OK
 * this is package ‘SoupX’ version ‘1.6.3’
 * package encoding: UTF-8
