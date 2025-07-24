@@ -28,9 +28,12 @@ SoupChannel <- function(tod,toc,metaData=NULL,calcSoupProfile=TRUE,...){
   validate_count_matrices(tod,toc)
   
   # Validate metadata if provided
-  if(!is.null(metaData) && !all(sort(colnames(toc))==sort(rownames(metaData))))
-    stop("Rownames of metaData must exactly match column names of table of counts. ",
-         "Found ",nrow(metaData)," rows in metaData but ",ncol(toc)," columns in toc.",call. = FALSE)
+  if(!is.null(metaData)) {
+    colMatch <- sort(colnames(toc))==sort(rownames(metaData))
+    if(!all(colMatch)) {
+      stop("Rownames of metaData must exactly match column names of table of counts. Found ",nrow(metaData)," rows in metaData but ",ncol(toc)," columns in toc.",call. = FALSE)
+    }
+  }
   #Munge everything into a list
   out <- list(tod=tod,toc=toc)
   out <- c(out,list(...))

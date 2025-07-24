@@ -107,11 +107,11 @@ load10X <- function(dataDir,cellIDs=NULL,channelName=NULL,readArgs=list(),includ
   #Get a name for the channel
   if(is.null(channelName))
     channelName <- ifelse(is.null(names(dataDir)),dataDir,names(dataDir))
-  channel <- SoupChannel(tod <- dat,
-                        toc <- datCells,
-                        metaData <- mDat,
-                        channelName <- channelName,
-                        dataDir <- dataDir,
+  channel <- SoupChannel(tod = dat,
+                        toc = datCells,
+                        metaData = mDat,
+                        channelName = channelName,
+                        dataDir = dataDir,
                         dataType='10X',
                         isV3=isV3,
                         DR=DR,
