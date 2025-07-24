@@ -1,0 +1,26 @@
+Warning message:
+startup::check(): Environment variable 'R_LIBS_USER' specifies a non-existing folder '/Users/kevin/Library/R/arm64/4.5/library' which R ignores and therefore are not used in .libPaths(). To create this folder, call dir.create("/Users/kevin/Library/R/arm64/4.5/library", recursive = TRUE) 
+* installing *source* package ‘SoupX’ ...
+** this is package ‘SoupX’ version ‘1.6.3’
+** using staged installation
+** R
+** data
+*** moving datasets to lazyload DB
+** inst
+** byte-compile and prepare package for lazy loading
+Warning message:
+startup::check(): Environment variable 'R_LIBS_USER' specifies a non-existing folder '/Users/kevin/Library/R/arm64/4.5/library' which R ignores and therefore are not used in .libPaths(). To create this folder, call dir.create("/Users/kevin/Library/R/arm64/4.5/library", recursive = TRUE) 
+** help
+*** installing help indices
+** building package indices
+Warning message:
+startup::check(): Environment variable 'R_LIBS_USER' specifies a non-existing folder '/Users/kevin/Library/R/arm64/4.5/library' which R ignores and therefore are not used in .libPaths(). To create this folder, call dir.create("/Users/kevin/Library/R/arm64/4.5/library", recursive = TRUE) 
+** installing vignettes
+** testing if installed package can be loaded from temporary location
+Warning message:
+startup::check(): Environment variable 'R_LIBS_USER' specifies a non-existing folder '/Users/kevin/Library/R/arm64/4.5/library' which R ignores and therefore are not used in .libPaths(). To create this folder, call dir.create("/Users/kevin/Library/R/arm64/4.5/library", recursive = TRUE) 
+** testing if installed package can be loaded from final location
+Warning message:
+startup::check(): Environment variable 'R_LIBS_USER' specifies a non-existing folder '/Users/kevin/Library/R/arm64/4.5/library' which R ignores and therefore are not used in .libPaths(). To create this folder, call dir.create("/Users/kevin/Library/R/arm64/4.5/library", recursive = TRUE) 
+** testing if installed package keeps a record of temporary installation path
+* DONE (SoupX)

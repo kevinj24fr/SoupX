@@ -207,18 +207,18 @@ quickMarkers <- function(toc,clusters,N=10,FDR=0.01,expressCut=0.9){
     return(data.frame())
   }
   
-  ww <- ww[valid_indices,,drop <- FALSE]
+      ww <- ww[valid_indices,,drop = FALSE]
   
-  out <- data.frame(gene <- rownames(nObs)[ww[,1]],
-                   cluster <- colnames(nObs)[ww[,2]],
-                   geneFrequency <- tf[ww],
-                   geneFrequencyOutsideCluster <- ntf[ww],
-                   geneFrequencySecondBest <- sndBest[ww],
-                   geneFrequencyGlobal <- nTot[ww[,1]]/ncol(toc),
-                   secondBestClusterName <- sndBestName[ww],
-                   tfidf <- score[ww],
-                   idf <- idf[ww[,1]],
-                   qval <- qvals[ww],
+  out <- data.frame(gene = rownames(nObs)[ww[,1]],
+                   cluster = colnames(nObs)[ww[,2]],
+                   geneFrequency = tf[ww],
+                   geneFrequencyOutsideCluster = ntf[ww],
+                   geneFrequencySecondBest = sndBest[ww],
+                   geneFrequencyGlobal = nTot[ww[,1]]/ncol(toc),
+                   secondBestClusterName = sndBestName[ww],
+                   tfidf = score[ww],
+                   idf = idf[ww[,1]],
+                   qval = qvals[ww],
                    stringsAsFactors=FALSE)
   return(out)
 }

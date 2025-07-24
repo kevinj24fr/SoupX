@@ -166,13 +166,13 @@ alloc <- function(tgt,bucketLims,ws=rep(1/length(bucketLims),length(bucketLims))
 #' # Benchmark specific operations
 #' benchmark_soupx(scToy,operations=c("quickMarkers","adjustCounts"))
 #' @export
-benchmark_soupx <- function(sc,operations="all",iterations=3,verbose=TRUE) {
+benchmark_soupx <- function(sc,operations=c("SoupChannel","autoEstCont","adjustCounts"),iterations=5,verbose=TRUE) {
   if(!inherits(sc,"SoupChannel")) {
     stop("sc must be a SoupChannel object",call. = FALSE)
   }
   
   if("all" %in% operations) {
-    operations <- c("quickMarkers","autoEstCont","adjustCounts","expandClusters")
+    operations <- c("SoupChannel","autoEstCont","adjustCounts","expandClusters")
   }
   
   results <- data.frame(
@@ -384,7 +384,7 @@ benchmark_soupx <- function(sc,operations="all",iterations=3,verbose=TRUE) {
       op <- results$operation[i]
       mean_t <- results$mean_time[i]
       mem <- results$memory_mb[i]
-      message(sprintf("%-15s: %.3f ± %.3f sec,%.1f MB",op,mean_t,results$sd_time[i],mem))
+      message(sprintf("%-15s: %.3f +/- %.3f sec,%.1f MB",op,mean_t,results$sd_time[i],mem))
     }
   }
   

@@ -1,0 +1,89 @@
+SoupX DUAL LICENSE
+
+Copyright (c) 2025 Kevin J.
+
+ACADEMIC AND NON-COMMERCIAL USE LICENSE
+
+Permission is hereby granted, free of charge, to any person or organization 
+affiliated with an academic institution, research institute, or non-profit 
+organization ("Academic User") to use, copy, modify, and distribute this 
+software and associated documentation files (the "Software") solely for 
+academic research, educational, and non-commercial purposes, subject to the 
+following conditions:
+
+1. The above copyright notice and this permission notice shall be included 
+   in all copies or substantial portions of the Software.
+
+2. The Software may not be used for any commercial purpose, including but not 
+   limited to:
+   - Commercial research and development
+   - Product development for commercial sale
+   - Service provision for commercial gain
+   - Integration into commercial products or services
+
+3. Academic Users may publish and share results obtained using the Software, 
+   provided they cite the original work appropriately.
+
+4. Modified versions of the Software may be distributed under the same 
+   license terms, provided the modifications are clearly documented.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+SOFTWARE.
+
+COMMERCIAL USE LICENSE
+
+Commercial use of this Software requires a separate commercial license. 
+Commercial use includes, but is not limited to:
+
+- Use by for-profit companies or organizations
+- Integration into commercial products or services
+- Use in commercial research and development
+- Use in providing commercial services
+- Distribution as part of commercial software packages
+
+For commercial licensing inquiries, please contact:
+
+Kevin J.
+Email: kevin.joseph@uniklinik-freiburg.de
+Website: https://github.com/kevinj24fr
+
+Commercial licenses are available with flexible terms including:
+- Single-user licenses
+- Enterprise-wide licenses  
+- OEM/redistribution licenses
+- Custom licensing arrangements
+
+DETERMINING YOUR LICENSE TYPE
+
+If you are unsure whether your use case requires a commercial license, 
+please contact us. Generally:
+
+ACADEMIC/NON-COMMERCIAL USE (Free):
+- University research projects
+- Educational use in academic courses
+- Non-profit research organizations
+- Personal academic research
+- Open source academic projects
+
+COMMERCIAL USE (License Required):
+- Biotechnology companies
+- Pharmaceutical companies
+- Commercial research organizations
+- Consulting services using the Software
+- SaaS platforms incorporating the Software
+- Any for-profit use of the Software
+
+CITATION REQUIREMENT
+
+All users (academic and commercial) must cite the original SoupX work:
+Young MD, Behjati S. SoupX removes ambient RNA contamination from droplet based 
+single cell RNA sequencing data. GigaScience. 2020.
+
+And this enhanced version:
+Enhanced SoupX with Robustness Improvements. 2025. 
+https://github.com/kevinj24fr/SoupX 

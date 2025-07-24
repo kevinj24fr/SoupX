@@ -1,0 +1,73 @@
+
+R version 4.5.1 (2025-06-13) -- "Great Square Root"
+Copyright (C) 2025 The R Foundation for Statistical Computing
+Platform: aarch64-apple-darwin24.4.0
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> pkgname <- "SoupX"
+> source(file.path(R.home("share"), "R", "examples-header.R"))
+> options(warn = 1)
+> library('SoupX')
+> 
+> base::assign(".oldSearch", base::search(), pos = 'CheckExEnv')
+> base::assign(".old_wd", base::getwd(), pos = 'CheckExEnv')
+> cleanEx()
+> nameEx("SoupChannel")
+> ### * SoupChannel
+> 
+> flush(stderr()); flush(stdout())
+> 
+> ### Name: SoupChannel
+> ### Title: Construct a SoupChannel object
+> ### Aliases: SoupChannel
+> 
+> ### ** Examples
+> 
+> #Load droplet and count tables
+> if(requireNamespace("Seurat", quietly = TRUE)) {
++   tod = Seurat::Read10X(system.file('extdata','toyData','raw_gene_bc_matrices','GRCh38',
++                                     package='SoupX'))
++   toc = Seurat::Read10X(system.file('extdata','toyData','filtered_gene_bc_matrices','GRCh38',
++                                     package='SoupX'))
++   #Default calculates soup profile
++   sc = SoupChannel(tod,toc)
++   names(sc)
++   #This can be suppressed
++   sc = SoupChannel(tod,toc,calcSoupProfile=FALSE)
++   names(sc)
++ }
+> 
+> 
+> 
+> cleanEx()
+> nameEx("adjustCounts")
+> ### * adjustCounts
+> 
+> flush(stderr()); flush(stdout())
+> 
+> ### Name: adjustCounts
+> ### Title: Remove background contamination from count matrix
+> ### Aliases: adjustCounts
+> 
+> ### ** Examples
+> 
+> # Ensure contamination fraction is calculated first
+> sc <- scToy
+> # Set contamination fraction manually for the toy dataset
+> sc <- setContaminationFraction(sc, 0.1)
+> out = adjustCounts(sc)
+Error: Contamination fractions must be calculated before this operation. Run autoEstCont(sc) or setContaminationFraction(sc,rho) first.
+Execution halted

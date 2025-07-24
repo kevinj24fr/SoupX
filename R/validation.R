@@ -14,9 +14,9 @@ NULL
 #' @param require_clusters Logical,whether clustering information is required
 #' @return Invisibly returns TRUE if validation passes,otherwise stops with error
 #' @keywords internal
-validate_soup_channel <- function(sc,require_soup_profile <- FALSE,require_rho <- FALSE,require_clusters = FALSE) {
+validate_soup_channel <- function(sc,require_soup_profile = FALSE,require_rho = FALSE,require_clusters = FALSE) {
   if (!is(sc,'SoupChannel')) {
-    stop("'sc' must be a SoupChannel object. Got object of class: ",class(sc,call. = FALSE)[1],
+    stop("'sc' must be a SoupChannel object. Got object of class: ",class(sc)[1],
          ". Create SoupChannel with SoupChannel(tod,toc).",call. = FALSE)
   }
   
@@ -70,7 +70,7 @@ validate_gene_list <- function(gene_list,available_genes = NULL) {
     missing_genes <- setdiff(all_genes,available_genes)
     if (length(missing_genes) > 0) {
       stop("Some genes not found in data: ",
-           paste(head(missing_genes,10),collapse <- ","),
+           paste(head(missing_genes,10),collapse = ","),
            if (length(missing_genes) > 10) paste(" and",length(missing_genes) - 10,"more") else "",
            call. = FALSE)
     }
@@ -99,7 +99,7 @@ validate_clusters <- function(clusters,cell_names) {
     na_cells <- names(clusters)[is.na(clusters)]
     if (is.null(na_cells)) na_cells <- which(is.na(clusters))
     stop("NA values found in cluster assignments. All cells must be assigned to a cluster. ",
-         "Cells with NA clusters: ",paste(head(na_cells,10),collapse <- ","),call. = FALSE)
+         "Cells with NA clusters: ",paste(head(na_cells,10),collapse = ","),call. = FALSE)
   }
   
   # Check that all cells are covered if clusters is named
@@ -107,7 +107,7 @@ validate_clusters <- function(clusters,cell_names) {
     missing_cells <- setdiff(cell_names,names(clusters))
     if (length(missing_cells) > 0) {
       stop("Invalid cluster specification. 'clusters' must be a named vector containing all cell names. ",
-           "Missing cells: ",paste(head(missing_cells,10),collapse <- ","),call. = FALSE)
+           "Missing cells: ",paste(head(missing_cells,10),collapse = ","),call. = FALSE)
     }
   } else {
     # If not named,must have same length as cell names
@@ -129,7 +129,7 @@ validate_clusters <- function(clusters,cell_names) {
 #' @keywords internal
 validate_contamination_fraction <- function(cont_frac,cell_names = NULL) {
   if (!is.numeric(cont_frac)) {
-    stop("Contamination fractions must be numeric. Got class: ",class(cont_frac,call. = FALSE)[1],call. = FALSE)
+    stop("Contamination fractions must be numeric. Got class: ",class(cont_frac)[1],call. = FALSE)
   }
   
   if (any(is.na(cont_frac))) {
@@ -157,7 +157,7 @@ validate_contamination_fraction <- function(cont_frac,cell_names = NULL) {
     missing_cells <- setdiff(names(cont_frac),cell_names)
     if (length(missing_cells) > 0) {
       stop("Cell names in contamination fractions don't match expected cells. ",
-           "Missing cells: ",paste(head(missing_cells,10),collapse <- ","),call. = FALSE)
+           "Missing cells: ",paste(head(missing_cells,10),collapse = ","),call. = FALSE)
     }
   }
   
@@ -191,7 +191,7 @@ validate_dimension_reduction <- function(DR,cell_names,min_dims = 2) {
     missing_cells <- setdiff(rownames(DR),cell_names)
     if (length(missing_cells) > 0) {
       stop("Rownames of 'DR' must match cell names in count matrix. ",
-           "Missing cells: ",paste(head(missing_cells,10),collapse <- ","),call. = FALSE)
+           "Missing cells: ",paste(head(missing_cells,10),collapse = ","),call. = FALSE)
     }
   }
   
@@ -241,7 +241,7 @@ validate_soup_profile <- function(soup_profile,gene_names = NULL) {
   }
   
   if (!is.data.frame(soup_profile)) {
-    stop("Soup profile must be a data.frame. Got class: ",class(soup_profile,call. = FALSE)[1],call. = FALSE)
+    stop("Soup profile must be a data.frame. Got class: ",class(soup_profile)[1],call. = FALSE)
   }
   
   required_cols <- c("est","counts")
@@ -249,14 +249,14 @@ validate_soup_profile <- function(soup_profile,gene_names = NULL) {
   if (length(missing_cols) > 0) {
     stop("Soup profile missing required columns: ",paste(missing_cols,collapse = ",",call. = FALSE),". ",
          "Required columns: ",paste(required_cols,collapse = ","),". ",
-         "Current columns: ",paste(colnames(soup_profile),collapse <- ","),call. = FALSE)
+         "Current columns: ",paste(colnames(soup_profile),collapse = ","),call. = FALSE)
   }
   
   if (!is.null(gene_names)) {
     missing_genes <- setdiff(gene_names,rownames(soup_profile))
     if (length(missing_genes) > 0) {
       stop("Soup profile missing genes found in count matrix. ",
-           "Missing genes: ",paste(head(missing_genes,10),collapse <- ","),call. = FALSE)
+           "Missing genes: ",paste(head(missing_genes,10),collapse = ","),call. = FALSE)
     }
   }
   
@@ -281,7 +281,7 @@ validate_soup_profile <- function(soup_profile,gene_names = NULL) {
 #' @param allow_na Whether NA values are allowed
 #' @return Invisibly returns TRUE if validation passes,otherwise stops with error
 #' @keywords internal
-validate_numeric_parameter <- function(value,param_name,min_value <- -Inf,max_value <- Inf,allow_na = FALSE) {
+validate_numeric_parameter <- function(value,param_name,min_value = -Inf,max_value = Inf,allow_na = FALSE) {
   if (!allow_na && any(is.na(value))) {
     stop("Parameter '",param_name,"' cannot contain NA values.",call. = FALSE)
   }
@@ -290,12 +290,12 @@ validate_numeric_parameter <- function(value,param_name,min_value <- -Inf,max_va
     stop("Parameter '",param_name,"' must be numeric. Got class: ",class(value)[1],call. = FALSE)
   }
   
-  if (any(value[!is.na(value)] < min_value,na.rm <- TRUE)) {
+  if (any(value[!is.na(value)] < min_value,na.rm = TRUE)) {
     stop("Parameter '",param_name,"' must be >= ",min_value,". ",
          "Minimum value found: ",min(value,na.rm = TRUE),call. = FALSE)
   }
   
-  if (any(value[!is.na(value)] > max_value,na.rm <- TRUE)) {
+  if (any(value[!is.na(value)] > max_value,na.rm = TRUE)) {
     stop("Parameter '",param_name,"' must be <= ",max_value,". ",
          "Maximum value found: ",max(value,na.rm = TRUE),call. = FALSE)
   }

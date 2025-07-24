@@ -114,8 +114,8 @@
   expCnts <- outer(ssc$soupProfile$est,ssc$metaData$nUMIs)
   rownames(expCnts) = rownames(ssc$soupProfile)
   colnames(expCnts) = rownames(ssc$metaData)
-  expCnts <- expCnts[tgts,,drop <- FALSE]
-  obsCnts <- ssc$toc[tgts,,drop <- FALSE]
+  expCnts <- expCnts[tgts,,drop = FALSE]
+  obsCnts <- ssc$toc[tgts,,drop = FALSE]
   
   # Vectorized p-value calculation
   pp <- ppois(obsCnts,expCnts * max(contaminationRange),lower.tail <- TRUE)
@@ -215,14 +215,14 @@
 #' Automatically calculate the contamination fraction
 #' (refactored for maintainability,API unchanged)
 autoEstCont <- function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMarkers=100,contaminationRange=c(0.01,0.8),rhoMaxFDR=0.2,priorRho=0.05,priorRhoStdDev=0.10,doPlot=TRUE,forceAccept=FALSE,verbose=TRUE){
-  validate_soup_channel(sc,require_soup_profile <- TRUE,require_clusters = FALSE)
+  validate_soup_channel(sc,require_soup_profile = TRUE,require_clusters = FALSE)
   
   # Enhanced parameter validation
-  validate_numeric_parameter(tfidfMin,"tfidfMin",min_value = 0)
-  validate_numeric_parameter(soupQuantile,"soupQuantile",min_value <- 0,max_value = 1)
+  validate_numeric_parameter(tfidfMin,"tfidfMin",min_value = 0.1)
+  validate_numeric_parameter(soupQuantile,"soupQuantile",min_value = 0,max_value = 1)
   validate_numeric_parameter(maxMarkers,"maxMarkers",min_value = 1)
-  validate_numeric_parameter(rhoMaxFDR,"rhoMaxFDR",min_value <- 0,max_value = 1)
-  validate_numeric_parameter(priorRho,"priorRho",min_value <- 0,max_value = 1)
+  validate_numeric_parameter(rhoMaxFDR,"rhoMaxFDR",min_value = 0,max_value = 1)
+  validate_numeric_parameter(priorRho,"priorRho",min_value = 0,max_value = 1)
   validate_numeric_parameter(priorRhoStdDev,"priorRhoStdDev",min_value = 0)
   
   if(length(contaminationRange) != 2 || any(contaminationRange < 0) || any(contaminationRange > 1) || contaminationRange[1] >= contaminationRange[2]) {
@@ -239,7 +239,7 @@ autoEstCont <- function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMar
     cluster_cells <- s[[1]]
     if(length(cluster_cells) > 0) {
       # Ensure we're working with a proper matrix subset
-      cell_subset <- sc$toc[,cluster_cells,drop <- FALSE]
+      cell_subset <- sc$toc[,cluster_cells,drop = FALSE]
       if(ncol(cell_subset) > 0) {
         # Use Matrix::rowSums for sparse matrices
         if(inherits(cell_subset,"Matrix")) {
@@ -247,21 +247,21 @@ autoEstCont <- function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMar
         } else {
           rs <- rowSums(cell_subset)
         }
-        tmp <- matrix(rs,ncol <- 1,nrow = nrow(sc$toc),
-                    dimnames <- list(rownames(sc$toc),cluster_name))
+        tmp <- matrix(rs,ncol = 1,nrow = nrow(sc$toc),
+                    dimnames = list(rownames(sc$toc),cluster_name))
       } else {
         # Handle empty subset case
-        tmp <- matrix(0,ncol <- 1,nrow = nrow(sc$toc),
-                    dimnames <- list(rownames(sc$toc),cluster_name))
+        tmp <- matrix(0,ncol = 1,nrow = nrow(sc$toc),
+                    dimnames = list(rownames(sc$toc),cluster_name))
       }
     } else {
       # Handle empty cluster case
-      tmp <- matrix(0,ncol <- 1,nrow = nrow(sc$toc),
-                  dimnames <- list(rownames(sc$toc),cluster_name))
+      tmp <- matrix(0,ncol = 1,nrow = nrow(sc$toc),
+                  dimnames = list(rownames(sc$toc),cluster_name))
     }
   } else {
     tmp <- do.call(cbind,lapply(s,function(e) {
-      mat <- sc$toc[,e,drop <- FALSE]
+      mat <- sc$toc[,e,drop = FALSE]
       # Use Matrix::rowSums for sparse matrices
       if(inherits(mat,"Matrix")) {
         rs <- Matrix::rowSums(mat)
@@ -269,8 +269,8 @@ autoEstCont <- function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMar
         rs <- rowSums(mat)
       }
       if (is.null(dim(rs))) {
-        rs <- matrix(rs,ncol <- 1,nrow = nrow(sc$toc),
-                    dimnames <- list(rownames(sc$toc),paste(e,collapse = "_")))
+        rs <- matrix(rs,ncol = 1,nrow = nrow(sc$toc),
+                    dimnames = list(rownames(sc$toc),paste(e,collapse = "_")))
       }
       rs
     }))
@@ -278,7 +278,7 @@ autoEstCont <- function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMar
   }
   ssc <- sc
   ssc$toc <- tmp
-  ssc$metaData <- data.frame(nUMIs <- colSums(tmp),row.names <- colnames(tmp))
+  ssc$metaData <- data.frame(nUMIs = colSums(tmp),row.names = colnames(tmp))
   # Ensure clusters column exists for marker selection
   if(!"clusters" %in% colnames(ssc$metaData)) {
     ssc$metaData$clusters <- rownames(ssc$metaData)
@@ -303,13 +303,13 @@ autoEstCont <- function(sc,topMarkers=NULL,tfidfMin=1.0,soupQuantile=0.90,maxMar
   rhoEst <- est$rhoEst
   rhoFWHM <- est$rhoFWHM
   markersUsed <- est$markersUsed
-  sc$fit <- list(dd <- dd,
-                priorRho <- priorRho,
-                priorRhoStdDev <- priorRhoStdDev,
-                posterior <- post,
-                rhoEst <- rhoEst,
-                rhoFWHM <- rhoFWHM,
-                markersUsed <- markersUsed)
+  sc$fit <- list(dd = dd,
+                priorRho = priorRho,
+                priorRhoStdDev = priorRhoStdDev,
+                posterior = post,
+                rhoEst = rhoEst,
+                rhoFWHM = rhoFWHM,
+                markersUsed = markersUsed)
   sc <- setContaminationFraction(sc,rhoEst,forceAccept = forceAccept)
   return(sc)
 }

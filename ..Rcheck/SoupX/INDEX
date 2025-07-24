@@ -1,0 +1,44 @@
+PBMC_metaData           PBMC 4K meta data
+PBMC_sc                 SoupChannel from PBMC data
+SoupChannel             Construct a SoupChannel object
+SoupX                   SoupX: Profile, quantify and remove ambient RNA
+                        expression from droplet based RNA-seq
+adjustCounts            Remove background contamination from count
+                        matrix
+alloc                   Allocate values to "buckets" subject to weights
+                        and constraints
+autoEstCont             Automatically calculate the contamination
+                        fraction
+benchmark_soupx         Benchmark SoupX Performance
+calculateContaminationFraction
+                        Calculate the contamination fraction
+estimateNonExpressingCells
+                        Calculate which cells genuinely do not express
+                        a particular gene or set of genes
+estimateSoup            Get expression profile of soup
+expandClusters          Expands soup counts calculated at the cluster
+                        level to the cell level
+generateSoupXReport     Generate Comprehensive SoupX Report
+initProgBar             Create Seurat style progress bar
+load10X                 Load a collection of 10X data-sets
+plotChangeMap           Plot maps comparing corrected/raw expression
+plotContaminationByCluster
+                        Plot Contamination Fraction by Cluster
+plotGeneContamination   Plot Gene-Specific Contamination Analysis
+plotMarkerDistribution
+                        Plots the distribution of the observed to
+                        expected expression for marker genes
+plotMarkerMap           Plot ratio of observed to expected counts on
+                        reduced dimension map
+plotQualityControl      Generate Quality Control Plots for SoupX
+                        Analysis
+plotSoupCorrelation     Plot correlation of expression profiles of soup
+                        and aggregated cells
+print.SoupChannel       Print method for SoupChannel
+quickMarkers            Gets top N markers for each cluster
+scToy                   Toy SoupChanel object
+setClusters             Sets clustering for SoupChannel
+setContaminationFraction
+                        Manually set contamination fraction
+setDR                   Manually set dimension reduction for a channel
+setSoupProfile          Set soup profile

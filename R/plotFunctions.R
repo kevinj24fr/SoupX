@@ -15,15 +15,15 @@
 plotSoupCorrelation <- function(sc){
   .check_ggplot2()
   if(!is(sc,'SoupChannel'))
-    stop("'sc' must be a SoupChannel object. Got object of class: ",class(sc,call. = FALSE)[1],
+    stop("'sc' must be a SoupChannel object. Got object of class: ",class(sc)[1],
          ". Create SoupChannel with SoupChannel(tod,toc).")
   #Calculate the cell profile
   cellProfile <- rowSums(sc$toc)
   cellProfile <- (cellProfile/sum(cellProfile))
   df <- data.frame(cellProfile,soupProfile=sc$soupProfile$est)
-  gg <- ggplot2::ggplot2::ggplot(df,ggplot2::ggplot2::aes(log10(cellProfile),log10(soupProfile))) +
-    ggplot2::ggplot2::geom_point(alpha=1/3) +
-    ggplot2::ggplot2::geom_abline(intercept=0,slope=1) +
+  gg <- ggplot2::ggplot(df,ggplot2::aes(log10(cellProfile),log10(soupProfile))) +
+    ggplot2::geom_point(alpha=1/3) +
+    ggplot2::geom_abline(intercept=0,slope=1) +
     ylab('log10(Soup Expression)')+
     xlab('log10(Aggregate cell Expression)')
   return(gg)
@@ -57,9 +57,9 @@ plotSoupCorrelation <- function(sc){
   nullMat <- estimateNonExpressingCells(sc,nonExpressedGeneList,...)
   obsProfile <- t(t(sc$toc) / sc$metaData$nUMIs)
   tst <- lapply(nonExpressedGeneList,function(e) colSums(obsProfile[e,,drop = FALSE]) / sum(sc$soupProfile[e,'est']))
-  df <- data.frame(MarkerGroup <- rep(names(tst),lengths(tst)),
-                  Barcode <- unlist(lapply(tst,names),use.names <- FALSE),
-                  Values <- unlist(tst,use.names = FALSE))
+  df <- data.frame(MarkerGroup = rep(names(tst),lengths(tst)),
+                  Barcode = unlist(lapply(tst,names),use.names = FALSE),
+                  Values = unlist(tst,use.names = FALSE))
   keep <- sample(colnames(sc$toc),min(ncol(sc$toc),maxCells))
   df$nUMIs <- sc$metaData[df$Barcode,'nUMIs']
   expCnts <- do.call(rbind,lapply(nonExpressedGeneList,function(e) sc$metaData$nUMIs * sum(sc$soupProfile[e,'est'])))
@@ -69,7 +69,7 @@ plotSoupCorrelation <- function(sc){
   globalRhos <- c()
   for (i in seq_along(nonExpressedGeneList)) {
     if (sum(nullMat[,i]) > 0) {
-      tmp <- suppressMessages(calculateContaminationFraction(sc,nonExpressedGeneList[i],nullMat[,i,drop <- FALSE],forceAccept = TRUE))
+      tmp <- suppressMessages(calculateContaminationFraction(sc,nonExpressedGeneList[i],nullMat[,i,drop = FALSE],forceAccept = TRUE))
       globalRhos <- c(globalRhos,tmp$metaData$rho[1])
     } else {
       globalRhos <- c(globalRhos,NA)
@@ -78,7 +78,7 @@ plotSoupCorrelation <- function(sc){
   names(globalRhos) = names(nonExpressedGeneList)
   globalRhos <- data.frame(MarkerGroup <- factor(names(globalRhos),levels <- names(nonExpressedGeneList)),
                           rho <- log10(globalRhos))
-  list(df <- df,keep <- keep,globalRhos = globalRhos)
+  list(df = df,keep = keep,globalRhos = globalRhos)
 }
 
 #' Plots the distribution of the observed to expected expression for marker genes
@@ -104,7 +104,7 @@ plotSoupCorrelation <- function(sc){
 plotMarkerDistribution <- function(sc,nonExpressedGeneList,maxCells=150,tfidfMin=1,...){
   .check_ggplot2()
   if(!is(sc,'SoupChannel'))
-    stop("'sc' must be a SoupChannel object. Got object of class: ",class(sc,call. = FALSE)[1],
+    stop("'sc' must be a SoupChannel object. Got object of class: ",class(sc)[1],
          ". Create SoupChannel with SoupChannel(tod,toc).")
   prep <- .prep_marker_distribution_data(sc,nonExpressedGeneList,maxCells,tfidfMin,...)
   df <- prep$df
@@ -139,13 +139,13 @@ plotMarkerDistribution <- function(sc,nonExpressedGeneList,maxCells=150,tfidfMin
   DR$logRatio[DR$logRatio < ratLims[1]] = ratLims[1]
   DR$logRatio[DR$logRatio > ratLims[2]] = ratLims[2]
   DR$logRatio[DR$geneRatio == 0] = NA
-  DR$qVals <- p.adjust(ppois(obs - 1,exp,lower.tail = FALSE),method <- 'BH')[rownames(DR)]
+      DR$qVals <- p.adjust(ppois(obs - 1,exp,lower.tail = FALSE),method = 'BH')[rownames(DR)]
   colVal <- 'qVals<FDR'
   if (!is.null(useToEst)) {
     DR$useToEst <- useToEst
     colVal <- 'useToEst'
   }
-  list(DR <- DR,rescaled <- rescaled,colVal = colVal)
+  list(DR = DR,rescaled = rescaled,colVal = colVal)
 }
 
 #' Plot ratio of observed to expected counts on reduced dimension map
@@ -169,7 +169,7 @@ plotMarkerDistribution <- function(sc,nonExpressedGeneList,maxCells=150,tfidfMin
 plotMarkerMap <- function(sc,geneSet,DR,ratLims=c(-2,2),FDR=0.05,useToEst=NULL,pointSize=2.0,pointShape=21,pointStroke=0.5,naPointSize=0.25){
   .check_ggplot2()
   if(!is(sc,'SoupChannel'))
-    stop("'sc' must be a SoupChannel object. Got object of class: ",class(sc,call. = FALSE)[1],
+    stop("'sc' must be a SoupChannel object. Got object of class: ",class(sc)[1],
          ". Create SoupChannel with SoupChannel(tod,toc).")
   prep <- .prep_marker_map_data(sc,geneSet,DR,ratLims,FDR,useToEst)
   DR <- prep$DR
@@ -197,8 +197,8 @@ plotMarkerMap <- function(sc,geneSet,DR,ratLims=c(-2,2),FDR=0.05,useToEst=NULL,p
   colnames(DR)[1:2] = c('RD1','RD2')
   if (dataType == 'soupFrac') {
     df <- DR
-    old <- colSums(sc$toc[geneSet,rownames(df),drop <- FALSE])
-    new <- colSums(cleanedMatrix[geneSet,rownames(df),drop <- FALSE])
+    old <- colSums(sc$toc[geneSet,rownames(df),drop = FALSE])
+    new <- colSums(cleanedMatrix[geneSet,rownames(df),drop = FALSE])
     relChange <- (old - new) / old
     df$old <- old
     df$new <- new
@@ -214,15 +214,15 @@ plotMarkerMap <- function(sc,geneSet,DR,ratLims=c(-2,2),FDR=0.05,useToEst=NULL,p
     df <- df[order(!is.na(df$relChange)),]
     df$relChange[which(df$relChange < zLims[1])] = zLims[1]
     df$relChange[which(df$relChange > zLims[2])] = zLims[2]
-    return(list(df <- df,nom <- nom,zLims = zLims))
+    return(list(df = df,nom = nom,zLims = zLims))
   } else {
     dfs <- list()
     df <- DR
     df$correction <- 'Uncorrected'
     if (dataType == 'binary') {
-      df$data <- colSums(sc$toc[geneSet,rownames(df),drop <- FALSE]) > 0
+      df$data <- colSums(sc$toc[geneSet,rownames(df),drop = FALSE]) > 0
     } else if (dataType == 'counts') {
-      df$data <- colSums(sc$toc[geneSet,rownames(df),drop <- FALSE])
+      df$data <- colSums(sc$toc[geneSet,rownames(df),drop = FALSE])
     }
     if (logData)
       df$data <- log10(df$data)
@@ -230,9 +230,9 @@ plotMarkerMap <- function(sc,geneSet,DR,ratLims=c(-2,2),FDR=0.05,useToEst=NULL,p
     df <- DR
     df$correction <- 'Corrected'
     if (dataType == 'binary') {
-      df$data <- colSums(cleanedMatrix[geneSet,rownames(df),drop <- FALSE]) > 0
+      df$data <- colSums(cleanedMatrix[geneSet,rownames(df),drop = FALSE]) > 0
     } else if (dataType == 'counts') {
-      df$data <- colSums(cleanedMatrix[geneSet,rownames(df),drop <- FALSE])
+      df$data <- colSums(cleanedMatrix[geneSet,rownames(df),drop = FALSE])
     }
     if (logData)
       df$data <- log10(df$data)
@@ -242,7 +242,7 @@ plotMarkerMap <- function(sc,geneSet,DR,ratLims=c(-2,2),FDR=0.05,useToEst=NULL,p
     dfs$correction <- factor(dfs$correction,levels = lvls[lvls %in% dfs$correction])
     dfs <- dfs[order(!is.na(dfs$data)),]
     zLims <- c(NA,NA)
-    return(list(dfs <- dfs,zLims = zLims))
+    return(list(dfs = dfs,zLims = zLims))
   }
 }
 
@@ -308,7 +308,7 @@ plotChangeMap <- function(sc,cleanedMatrix,geneSet,DR,dataType=c('soupFrac','bin
 #' # Access individual plots
 #' sc_qc$soup_profile
 #' sc_qc$contamination_distribution
-plotQualityControl <- function(sc,cleanedMatrix <- NULL,maxGenes = 20) {
+plotQualityControl <- function(sc,cleanedMatrix = NULL,maxGenes = 20) {
   .check_ggplot2()
   .plotFunctions_validate_sc(sc)
   
@@ -379,7 +379,7 @@ plotQualityControl <- function(sc,cleanedMatrix <- NULL,maxGenes = 20) {
 #' @return A ggplot2 object
 #' @examples
 #' plotContaminationByCluster(scToy)
-plotContaminationByCluster <- function(sc,clusters <- NULL,plotType = "boxplot") {
+plotContaminationByCluster <- function(sc,clusters = NULL,plotType = "boxplot") {
   .check_ggplot2()
   if(!inherits(sc,'SoupChannel')) {
     stop("'sc' must be a SoupChannel object",call. = FALSE)
@@ -421,12 +421,12 @@ plotContaminationByCluster <- function(sc,clusters <- NULL,plotType = "boxplot")
       ggplot2::theme(axis.text.x <- element_text(angle <- 45,hjust = 1))
   } else if(plotType == "bar") {
     cluster_summary <- aggregate(Contamination ~ Cluster,data = plot_data,
-                               FUN <- function(x) c(mean <- mean(x),se <- sd(x)/sqrt(length(x))))
-    cluster_summary <- data.frame(
-      Cluster <- cluster_summary$Cluster,
-      Mean <- cluster_summary$Contamination[,"mean"],
-      SE <- cluster_summary$Contamination[,"se"]
-    )
+                               FUN = function(x) c(mean = mean(x),se = sd(x)/sqrt(length(x))))
+          cluster_summary <- data.frame(
+        Cluster = cluster_summary$Cluster,
+        Mean = cluster_summary$Contamination[,"mean"],
+        SE = cluster_summary$Contamination[,"se"]
+      )
     
     gg <- ggplot2::ggplot(cluster_summary,ggplot2::aes(x <- Cluster,y = Mean)) +
       ggplot2::geom_bar(stat <- "identity",fill <- "lightblue",alpha = 0.7) +
@@ -452,7 +452,7 @@ plotContaminationByCluster <- function(sc,clusters <- NULL,plotType = "boxplot")
 #' @return A ggplot2 object
 #' @examples
 #' plotGeneContamination(scToy,c("CD7","LTB","S100A9"))
-plotGeneContamination <- function(sc,geneSet,cleanedMatrix <- NULL,plotType = "contamination_ratio") {
+plotGeneContamination <- function(sc,geneSet,cleanedMatrix = NULL,plotType = "contamination_ratio") {
   .check_ggplot2()
   if(!inherits(sc,'SoupChannel')) {
     stop("'sc' must be a SoupChannel object",call. = FALSE)
@@ -548,7 +548,7 @@ plotGeneContamination <- function(sc,geneSet,cleanedMatrix <- NULL,plotType = "c
 #' @return A list containing all diagnostic plots,summary statistics,and the report file path
 #' @examples
 #' report <- generateSoupXReport(scToy,format = 'pdf')
-generateSoupXReport <- function(sc,cleanedMatrix <- NULL,output_dir <- NULL,filename_prefix <- "soupx_report",format = c('pdf','html'),interpretation <- TRUE) {
+generateSoupXReport <- function(sc,cleanedMatrix = NULL,output_dir = NULL,filename_prefix = "soupx_report",format = c('pdf','html'),interpretation = TRUE) {
   .check_ggplot2()
   format <- match.arg(format)
   if(!inherits(sc,'SoupChannel')) stop("'sc' must be a SoupChannel object",call. = FALSE)
@@ -557,10 +557,10 @@ generateSoupXReport <- function(sc,cleanedMatrix <- NULL,output_dir <- NULL,file
   if(is.null(output_dir)) output_dir <- tempdir()
   
   # Generate all QC plots
-  qc_plots <- tryCatch(plotQualityControl(sc,cleanedMatrix),error <- function(e) list(error <- e$message))
-  cluster_contamination <- tryCatch(if("clusters" %in% colnames(sc$metaData) && "rho" %in% colnames(sc$metaData)) plotContaminationByCluster(sc) else NULL,error <- function(e) NULL)
-  soup_correlation <- tryCatch(plotSoupCorrelation(sc),error <- function(e) NULL)
-  marker_distribution <- tryCatch(if("clusters" %in% colnames(sc$metaData)) plotMarkerDistribution(sc) else NULL,error <- function(e) NULL)
+  qc_plots <- tryCatch(plotQualityControl(sc,cleanedMatrix),error = function(e) list(error = e$message))
+      cluster_contamination <- tryCatch(if("clusters" %in% colnames(sc$metaData) && "rho" %in% colnames(sc$metaData)) plotContaminationByCluster(sc) else NULL,error = function(e) NULL)
+    soup_correlation <- tryCatch(plotSoupCorrelation(sc),error = function(e) NULL)
+    marker_distribution <- tryCatch(if("clusters" %in% colnames(sc$metaData)) plotMarkerDistribution(sc) else NULL,error = function(e) NULL)
   
   # Summary statistics
   summary <- list(
@@ -734,7 +734,7 @@ runSoupXPipeline <- function(config,log_file = "soupx_pipeline.log") {
   
   # Estimate contamination
   .log("Estimating contamination fraction...")
-  sc <- tryCatch(autoEstCont(sc,verbose = getp("verbose",FALSE),doPlot <- FALSE),error <- function(e) { .log(paste("ERROR in autoEstCont:",e$message)); stop(e,call. = FALSE) })
+      sc <- tryCatch(autoEstCont(sc,verbose = getp("verbose",FALSE),doPlot = FALSE),error = function(e) { .log(paste("ERROR in autoEstCont:",e$message)); stop(e,call. = FALSE) })
   .log("Contamination estimated.")
   
   # Adjust counts

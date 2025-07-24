@@ -25,16 +25,18 @@ Creates a SoupChannel object that contains everything related to the soup estima
 }
 \examples{
 #Load droplet and count tables
-tod = Seurat::Read10X(system.file('extdata','toyData','raw_gene_bc_matrices','GRCh38',
-                                  package='SoupX'))
-toc = Seurat::Read10X(system.file('extdata','toyData','filtered_gene_bc_matrices','GRCh38',
-                                  package='SoupX'))
-#Default calculates soup profile
-sc = SoupChannel(tod,toc)
-names(sc)
-#This can be suppressed
-sc = SoupChannel(tod,toc,calcSoupProfile=FALSE)
-names(sc)
+if(requireNamespace("Seurat", quietly = TRUE)) {
+  tod = Seurat::Read10X(system.file('extdata','toyData','raw_gene_bc_matrices','GRCh38',
+                                    package='SoupX'))
+  toc = Seurat::Read10X(system.file('extdata','toyData','filtered_gene_bc_matrices','GRCh38',
+                                    package='SoupX'))
+  #Default calculates soup profile
+  sc = SoupChannel(tod,toc)
+  names(sc)
+  #This can be suppressed
+  sc = SoupChannel(tod,toc,calcSoupProfile=FALSE)
+  names(sc)
+}
 }
 \seealso{
 SoupChannelList estimateSoup setSoupProfile setClusters
