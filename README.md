@@ -7,8 +7,6 @@
 
 ## Release Notes: Version 1.6.4
 
-- **FIXED:** All assignment and argument errors (`<-` vs `=`) in function calls, data.frame, and list construction.
-- **FIXED:** All subsetting errors (`drop <- FALSE` vs `drop = FALSE`).
 - **FIXED:** Validation logic for all numeric parameters and input checks.
 - **FIXED:** Documentation and examples updated for clarity and accuracy.
 - **IMPROVED:** Optional dependencies (Seurat, ggplot2) are handled gracefully.
